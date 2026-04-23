@@ -74,7 +74,9 @@ cd jarvis-platform
 
 ### 1. 2. Setup environment
 python -m venv venv
+
 venv\Scripts\activate   # Windows
+
 pip install -r requirements.txt
 
 ###3. Configure environment
