@@ -61,8 +61,8 @@ class STTService:
     def transcribe(self, audio):
         return self.client.transcribe(audio, language=config.whisper_language)
 
-    def listen(self):
-        audio = self.record()
+    def listen(self, min_seconds=1, max_seconds=15, silence_duration=1.5):
+        audio = self.record(min_seconds=min_seconds, max_seconds=max_seconds, silence_duration=silence_duration)
         if audio is None:
             return ""
         return self.transcribe(audio).strip()

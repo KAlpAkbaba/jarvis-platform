@@ -90,15 +90,34 @@ Sadece JSON dondur, baska hicbir aciklama yapma."""
                     "medya_sorgu": None, "rezervasyon_detay": None}
 
     def summarize(self, question, search_result):
-        sistem = "Sen yalnizca TURKCE konusan bir yapay zeka asistansin. KESINLIKLE baska dil kullanma. Kisa, net ve dogru bilgi ver."
         if search_result and len(search_result) > 20:
-            prompt = f"Soru: {question}\nBilgi: {search_result[:600]}\nYukaridaki bilgiyi kullanarak soruyu TURKCE olarak 2-4 cumleyle cevapla."
+            sistem = """Sen yalnizca TURKCE konusan bir yapay zeka asistansin.
+Verilen bilgileri kullanarak soruyu detayli, akici ve zengin bir sekilde anlat.
+Mitoloji veya tarih sorularinda hikayeleri canli anlat.
+KESINLIKLE Turkce kullan, baska dil kullanma."""
+            prompt = f"""Soru: {question}
+
+Kaynak bilgiler:
+{search_result[:1500]}
+
+Bu bilgileri kullanarak soruyu detayli TURKCE olarak anlat. 
+Hikaye veya mitoloji ise canli ve zengin anlat, kisaltma."""
         else:
-            prompt = f"Soru: {question}\nBu soruyu TURKCE olarak 2-4 cumleyle cevapla."
+            sistem = """Sen yalnizca TURKCE konusan bilgili bir yapay zeka asistansin.
+Sorulari detayli, akici ve dogru sekilde cevapla.
+Mitoloji veya tarih sorularinda hikayeleri canli anlat.
+KESINLIKLE Turkce kullan."""
+            prompt = f"""Soru: {question}
+
+Bu soruyu kendi bilginle detayli TURKCE olarak cevapla.
+Hikaye veya mitoloji ise canli ve zengin anlat, kisaltma."""
         try:
             return self.client.chat(
-                [{"role": "system", "content": sistem}, {"role": "user", "content": prompt}],
-                num_predict=800, temperature=0.3
+                [{"role": "system", "content": sistem},
+                 {"role": "user", "content": prompt}],
+                num_predict=2000,
+                temperature=0.4,
+                num_ctx=8192
             )
         except:
             return "Bilgi bulunamadi."
