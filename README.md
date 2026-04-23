@@ -1,14 +1,12 @@
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![Docker](https://img.shields.io/badge/docker-ready-green)
+![Status](https://img.shields.io/badge/status-active-brightgreen)
+
 # Jarvis Platform
 
 A modular Turkish AI assistant platform supporting voice, text, and API-based interaction.
 
 This project combines speech recognition, local LLM-based intent classification, multi-skill routing, and text-to-speech synthesis into a single extensible system.
-
----
-
-## 🧠 Architecture
-
-![Architecture](docs/jarvis_platform_v3.svg)
 
 ---
 
@@ -31,43 +29,8 @@ This project combines speech recognition, local LLM-based intent classification,
 ---
 
 ## 🧠 Architecture
-User (Voice / Text)
-↓
 
-STT Service (Whisper)
-↓
-
-LLM Intent Classification (Ollama)
-↓
-
-Intent Router
-↓
-
-Skill Layer
-
-├── Media
-
-├── Weather
-
-├── Notes
-
-├── Reminders
-
-├── Reservation
-
-└── Web Search (SearXNG)
-↓
-
-Database (PostgreSQL)
-↓
-
-Response Generator
-↓
-
-TTS Service (Piper / XTTS)
-↓
-
-User Output (Audio/Text)
+![Architecture](docs/jarvis_platform_v3.svg)
 
 ---
 
@@ -103,7 +66,7 @@ git clone https://github.com/KAlpAkbaba/jarvis-platform
 
 cd jarvis-platform
 
-### 1. 2. Setup environment
+### 2. Setup environment
 python -m venv venv
 
 venv\Scripts\activate   # Windows
