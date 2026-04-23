@@ -1,25 +1,23 @@
 # Yol Haritasi
 
 ## Tamamlanan
-- [x] STT — Whisper Large V3 GPU
-- [x] TTS — Piper TTS
-- [x] LLM — Qwen2.5:7b (Ollama)
-- [x] Web arama — SearxNG
+- [x] STT â€” Whisper Large V3 GPU
+- [x] TTS â€” Piper TTS
+- [x] LLM â€” Qwen2.5:7b (Ollama)
+- [x] Web arama â€” SearxNG
 - [x] Not alma & hatirlatici
 - [x] Otel rezervasyonu (Playwright + Booking.com)
-- [x] Uçak bileti (Playwright + Enuygun.com)
+- [x] UÃ§ak bileti (Playwright + Enuygun.com)
 - [x] Hava durumu bildirimi
-- [x] Web arayüzü (ngrok + FastAPI)
-- [x] Modüler yapi (jarvis-platform)
+- [x] Web arayÃ¼zÃ¼ (ngrok + FastAPI)
+- [x] ModÃ¼ler yapi (jarvis-platform)
 - [x] GitHub entegrasyonu
-
-## Devam Eden
-- [ ] Wake word (OpenWakeWord)
-- [ ] Konusma baglami iyilestirme
+- [x] Wake word (OpenWakeWord)
+- [x] Konusma baglami iyilestirme
 
 ## Planlanan
 - [ ] IoT entegrasyonu (Home Assistant)
 - [ ] Kisisel profil & hatirlama
 - [ ] Proaktif asistan
-- [ ] Çoklu dil destegi
-- [ ] Yüz tanima
+- [ ] Ã‡oklu dil destegi
+- [ ] YÃ¼z tanima
