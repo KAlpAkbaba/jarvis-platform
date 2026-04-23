@@ -1,6 +1,5 @@
 __pycache__/
 *.pyc
-*.pyo
 .env
 venv/
 *.onnx
@@ -9,3 +8,5 @@ venv/
 *.mp3
 .DS_Store
 *.log
+chromedriver.exe
+benim_sesim.wav
