@@ -70,6 +70,7 @@ docs/ → Documentation
 
 ## ⚙️ Installation
 
+
 ### 1. Clone repo
 
 git clone https://github.com/KAlpAkbaba/jarvis-platform
@@ -93,7 +94,9 @@ POSTGRES_PASSWORD=your_password
 
 OLLAMA_HOST=http://localhost:11434
 
-🐳 Run with Docker
+##🐳 Run with Docker
+
+
 docker-compose up -d
 
 Services:
@@ -102,7 +105,8 @@ PostgreSQL
 
 SearXNG (local search engine)
 
-▶️ Running the Assistant
+##▶️ Running the Assistant
+
 
 CLI mode
 
@@ -116,8 +120,7 @@ Then open:
 
 http://localhost:8000
 
-🔎 Example Commands
-
+##🔎 Example Commands
 
 "Yarın saat 2'de toplantı hatırlat"
 
@@ -129,12 +132,12 @@ http://localhost:8000
 
 "Ankara'ya uçak bileti"
 
-🧪 Testing
+##🧪 Testing
 
 
 pytest tests/
 
-🛠️ Technologies
+##🛠️ Technologies
 
 
 Python
@@ -185,7 +188,7 @@ Docker
    - [] Real-time streaming voice interaction
    - [] Long-term memory & personalization engine
 
- ⚠️ Notes
+##⚠️ Notes
 
  
 Requires local model setup (Whisper, Ollama, TTS)
@@ -195,6 +198,6 @@ Some features depend on external services
 Optimized for Turkish language use
 
 
-👤 Author
+##👤 Author
 
 Developed by Kadir Alp Akbaba
