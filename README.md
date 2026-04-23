@@ -6,6 +6,13 @@ This project combines speech recognition, local LLM-based intent classification,
 
 ---
 
+## 🧠 Architecture
+
+![Architecture1](docs/mermaid-diagram.png)
+![Architecture2](docs/jarvis_platform_v3.svg)
+
+---
+
 ## 🚀 Features
 
 - 🎤 Speech-to-Text (Whisper-based)
