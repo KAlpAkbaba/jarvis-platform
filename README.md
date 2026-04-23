@@ -154,9 +154,6 @@ SearXNG (self-hosted search)
 Docker
 
 
-📌 Roadmap
-
-
 ## 📌 Roadmap
 
 ✅ Completed
