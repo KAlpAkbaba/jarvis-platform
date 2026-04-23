@@ -1,324 +1,189 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Boolean
-from sqlalchemy.orm import declarative_base, sessionmaker
-from datetime import datetime, timedelta
+# -*- coding: utf-8 -*-
 import json
-
-DB_URL = "postgresql://postgres:***REMOVED***@localhost:5432/asistan"
-
-engine = create_engine(DB_URL)
-Session = sessionmaker(bind=engine)
-Base = declarative_base()
-
-
-# ============ TABLOLAR ============
-
-class Not(Base):
-    __tablename__ = "notlar"
-    id         = Column(Integer, primary_key=True)
-    içerik     = Column(Text, nullable=False)
-    kategori   = Column(String(50), default="genel")
-    tarih      = Column(DateTime, default=datetime.now)
-    hatırlatma = Column(DateTime, nullable=True)
-    tamamlandı = Column(Boolean, default=False)
+from datetime import datetime, timedelta
+from typing import List, Optional, Dict
+from sqlalchemy.orm import Session
+from database.models import Note, Conversation, Knowledge, ArchivedNote, Reservation
+from database.db import SessionLocal
 
 
-class Konuşma(Base):
-    __tablename__ = "konusmalar"
-    id     = Column(Integer, primary_key=True)
-    rol    = Column(String(20))
-    içerik = Column(Text)
-    tarih  = Column(DateTime, default=datetime.now)
+def _db():
+    return SessionLocal()
 
 
-class Bilgi(Base):
-    __tablename__ = "bilgiler"
-    id     = Column(Integer, primary_key=True)
-    sorgu  = Column(Text)
-    yanıt  = Column(Text)
-    kaynak = Column(String(200), nullable=True)
-    tarih  = Column(DateTime, default=datetime.now)
+def add_note(content, category="genel", remind_at=None):
+    db = _db()
+    note = Note(content=content, category=category, remind_at=remind_at)
+    db.add(note)
+    db.commit()
+    note_id = note.id
+    db.close()
+    return note_id
 
 
-class GecmisNot(Base):
-    __tablename__ = "gecmis_notlar"
-    id         = Column(Integer, primary_key=True)
-    içerik     = Column(Text, nullable=False)
-    kategori   = Column(String(50), default="genel")
-    oluşturma  = Column(DateTime, default=datetime.now)
-    hatırlatma = Column(DateTime, nullable=True)
-    tamamlanma = Column(DateTime, default=datetime.now)
+def get_notes(category=None):
+    db = _db()
+    q = db.query(Note).filter_by(completed=False)
+    if category:
+        q = q.filter_by(category=category)
+    notes = [(n.id, n.content, n.category, n.remind_at) for n in q.all()]
+    db.close()
+    return notes
 
 
-class Rezervasyon(Base):
-    __tablename__ = "rezervasyonlar"
-    id           = Column(Integer, primary_key=True)
-    tür          = Column(String(20))
-    şehir        = Column(String(100), nullable=True)
-    nereden      = Column(String(100), nullable=True)
-    nereye       = Column(String(100), nullable=True)
-    giriş_tarihi = Column(DateTime, nullable=True)
-    çıkış_tarihi = Column(DateTime, nullable=True)
-    kişi         = Column(Integer, default=1)
-    durum        = Column(String(20), default="onaylandı")
-    detaylar     = Column(Text, nullable=True)
-    tarih        = Column(DateTime, default=datetime.now)
+def complete_note(note_id):
+    db = _db()
+    note = db.query(Note).filter_by(id=note_id).first()
+    if note:
+        note.completed = True
+        db.commit()
+    db.close()
 
 
-def tabloları_oluştur():
-    Base.metadata.create_all(engine)
-    print("✅ Tablolar oluşturuldu!")
-
-
-# ============ NOT FONKSİYONLARI ============
-
-def not_ekle(içerik: str, kategori: str = "genel", hatırlatma: datetime = None):
-    session = Session()
-    yeni_not = Not(içerik=içerik, kategori=kategori, hatırlatma=hatırlatma)
-    session.add(yeni_not)
-    session.commit()
-    session.close()
-    return "Not kaydedildi."
-
-
-def notları_getir(kategori: str = None):
-    session = Session()
-    if kategori:
-        notlar = session.query(Not).filter_by(kategori=kategori, tamamlandı=False).all()
-    else:
-        notlar = session.query(Not).filter_by(tamamlandı=False).all()
-    sonuç = [(n.id, n.içerik, n.kategori, n.hatırlatma) for n in notlar]
-    session.close()
-    return sonuç
-
-
-def notu_tamamla(not_id: int):
-    session = Session()
-    not_ = session.query(Not).filter_by(id=not_id).first()
-    if not_:
-        not_.tamamlandı = True
-        session.commit()
-    session.close()
-
-
-def notu_arsivle(not_id: int):
-    session = Session()
-    not_ = session.query(Not).filter_by(id=not_id).first()
-    if not_:
-        gecmis = GecmisNot(
-            içerik=not_.içerik,
-            kategori=not_.kategori,
-            oluşturma=not_.tarih,
-            hatırlatma=not_.hatırlatma,
-            tamamlanma=datetime.now()
+def archive_note(note_id):
+    db = _db()
+    note = db.query(Note).filter_by(id=note_id).first()
+    if note:
+        archived = ArchivedNote(
+            content=note.content, category=note.category,
+            created_at=note.created_at, remind_at=note.remind_at,
+            archived_at=datetime.now()
         )
-        session.add(gecmis)
-        not_.tamamlandı = True
-        session.commit()
-    session.close()
+        db.add(archived)
+        note.completed = True
+        db.commit()
+    db.close()
 
 
-def gecmis_notlari_getir(limit: int = 10) -> list:
-    session = Session()
-    notlar = session.query(GecmisNot).order_by(
-        GecmisNot.tamamlanma.desc()
-    ).limit(limit).all()
-    sonuç = [(n.id, n.içerik, n.hatırlatma, n.tamamlanma) for n in notlar]
-    session.close()
-    return sonuç
+def get_archived_notes(limit=10):
+    db = _db()
+    notes = db.query(ArchivedNote).order_by(ArchivedNote.archived_at.desc()).limit(limit).all()
+    result = [(n.id, n.content, n.remind_at, n.archived_at) for n in notes]
+    db.close()
+    return result
 
 
-# ============ KONUŞMA FONKSİYONLARI ============
-
-def konuşma_kaydet(rol: str, içerik: str):
-    session = Session()
-    kayıt = Konuşma(rol=rol, içerik=içerik)
-    session.add(kayıt)
-    session.commit()
-    session.close()
-
-
-def son_konuşmaları_getir(limit: int = 20):
-    session = Session()
-    kayıtlar = session.query(Konuşma).order_by(
-        Konuşma.tarih.desc()
-    ).limit(limit).all()
-    sonuç = [{"rol": k.rol, "içerik": k.içerik} for k in kayıtlar]
-    session.close()
-    return list(reversed(sonuç))
-
-
-# ============ BİLGİ FONKSİYONLARI ============
-
-def bilgi_kaydet(sorgu: str, yanıt: str, kaynak: str = None):
-    session = Session()
-    bilgi = Bilgi(sorgu=sorgu, yanıt=yanıt, kaynak=kaynak)
-    session.add(bilgi)
-    session.commit()
-    session.close()
-
-
-def bilgi_ara(sorgu: str):
-    session = Session()
-    bilgi = session.query(Bilgi).filter(
-        Bilgi.sorgu.ilike(f"%{sorgu}%")
-    ).order_by(Bilgi.tarih.desc()).first()
-    sonuç = {"sorgu": bilgi.sorgu, "yanıt": bilgi.yanıt} if bilgi else None
-    session.close()
-    return sonuç
-
-
-# ============ ZAMAN FONKSİYONLARI ============
-
-def zaman_ifadesi(hedef: datetime) -> str:
-    şimdi = datetime.now()
-    fark = hedef - şimdi
-    fark_saniye = fark.total_seconds()
-    hedef_gun = hedef.date()
-    bugun = şimdi.date()
-    fark_gun_sayisi = (hedef_gun - bugun).days
-
-    if fark_saniye < 0:
-        gecen = abs(fark_saniye)
-        if gecen < 3600:
-            return f"{int(gecen/60)} dakika önce"
-        elif gecen < 86400:
-            return f"{int(gecen/3600)} saat önce"
-        elif fark_gun_sayisi == -1:
-            return f"dün saat {hedef.strftime('%H:%M')}"
-        elif abs(fark_gun_sayisi) < 7:
-            return f"{abs(fark_gun_sayisi)} gün önce saat {hedef.strftime('%H:%M')}"
-        elif abs(fark_gun_sayisi) < 30:
-            return f"{abs(fark_gun_sayisi)//7} hafta önce"
-        elif abs(fark_gun_sayisi) < 365:
-            return f"{abs(fark_gun_sayisi)//30} ay önce"
-        else:
-            return f"{abs(fark_gun_sayisi)//365} yıl önce"
-    else:
-        if fark_gun_sayisi == 0:
-            return f"bugün saat {hedef.strftime('%H:%M')}"
-        elif fark_gun_sayisi == 1:
-            return f"yarın saat {hedef.strftime('%H:%M')}"
-        elif fark_gun_sayisi == 2:
-            return f"öbür gün saat {hedef.strftime('%H:%M')}"
-        elif fark_gun_sayisi < 7:
-            return f"{fark_gun_sayisi} gün sonra saat {hedef.strftime('%H:%M')}"
-        elif fark_gun_sayisi < 30:
-            return f"{fark_gun_sayisi//7} hafta sonra"
-        elif fark_gun_sayisi < 365:
-            return f"{fark_gun_sayisi//30} ay sonra"
-        else:
-            return f"{fark_gun_sayisi//365} yıl sonra"
-
-
-# ============ HATIRLATICI FONKSİYONLARI ============
-
-def hatırlatıcıları_kontrol_et() -> list:
-    session = Session()
-    şimdi = datetime.now()
-    bildirim_zamanı = şimdi + timedelta(minutes=15)
-
-    notlar = session.query(Not).filter(
-        Not.kategori == "hatırlatıcı",
-        Not.tamamlandı == False,
-        Not.hatırlatma <= bildirim_zamanı,
-        Not.hatırlatma >= şimdi - timedelta(minutes=1)
+def get_pending_reminders():
+    db = _db()
+    now = datetime.now()
+    notify_time = now + timedelta(minutes=15)
+    notes = db.query(Note).filter(
+        Note.category == "hatirlatici",
+        Note.completed == False,
+        Note.remind_at <= notify_time,
+        Note.remind_at >= now - timedelta(minutes=1)
     ).all()
+    result = [(n.id, n.content, n.remind_at) for n in notes]
+    db.close()
+    return result
 
-    sonuç = [(n.id, n.içerik, n.hatırlatma) for n in notlar]
-    session.close()
-    return sonuç
 
-
-def zamani_gecen_notlari_arsivle():
-    session = Session()
-    şimdi = datetime.now()
-
-    gecmis = session.query(Not).filter(
-        Not.kategori == "hatırlatıcı",
-        Not.tamamlandı == False,
-        Not.hatırlatma < şimdi - timedelta(hours=1)
+def archive_expired_reminders():
+    db = _db()
+    now = datetime.now()
+    expired = db.query(Note).filter(
+        Note.category == "hatirlatici",
+        Note.completed == False,
+        Note.remind_at < now - timedelta(hours=1)
     ).all()
-
-    for not_ in gecmis:
-        gecmis_not = GecmisNot(
-            içerik=not_.içerik,
-            kategori=not_.kategori,
-            oluşturma=not_.tarih,
-            hatırlatma=not_.hatırlatma,
-            tamamlanma=şimdi
+    for note in expired:
+        archived = ArchivedNote(
+            content=note.content, category=note.category,
+            created_at=note.created_at, remind_at=note.remind_at,
+            archived_at=now
         )
-        session.add(gecmis_not)
-        not_.tamamlandı = True
+        db.add(archived)
+        note.completed = True
+    db.commit()
+    db.close()
 
-    session.commit()
-    session.close()
+
+def save_conversation(role, content):
+    db = _db()
+    db.add(Conversation(role=role, content=content))
+    db.commit()
+    db.close()
 
 
-# ============ REZERVASYON FONKSİYONLARI ============
+def get_recent_conversations(limit=20):
+    db = _db()
+    records = db.query(Conversation).order_by(Conversation.created_at.desc()).limit(limit).all()
+    result = [{"role": r.role, "content": r.content} for r in reversed(records)]
+    db.close()
+    return result
 
-def rezervasyon_kaydet(tür, şehir=None, nereden=None, nereye=None,
-                        giriş=None, çıkış=None, kişi=1, detaylar=None):
-    session = Session()
-    rez = Rezervasyon(
-        tür=tür,
-        şehir=şehir,
-        nereden=nereden,
-        nereye=nereye,
-        giriş_tarihi=giriş,
-        çıkış_tarihi=çıkış,
-        kişi=kişi,
-        detaylar=json.dumps(detaylar, ensure_ascii=False) if detaylar else None
+
+def save_knowledge(query, answer, source=None):
+    db = _db()
+    db.add(Knowledge(query=query, answer=answer, source=source))
+    db.commit()
+    db.close()
+
+
+def search_knowledge(query):
+    db = _db()
+    item = db.query(Knowledge).filter(
+        Knowledge.query.ilike(f"%{query}%")
+    ).order_by(Knowledge.created_at.desc()).first()
+    result = {"query": item.query, "answer": item.answer} if item else None
+    db.close()
+    return result
+
+
+def save_reservation(type, city=None, from_city=None, to_city=None,
+                     check_in=None, check_out=None, guests=1, details=None):
+    db = _db()
+    rez = Reservation(
+        type=type, city=city, from_city=from_city, to_city=to_city,
+        check_in=check_in, check_out=check_out, guests=guests,
+        details=json.dumps(details, ensure_ascii=False) if details else None
     )
-    session.add(rez)
-    session.commit()
+    db.add(rez)
+    db.commit()
     rez_id = rez.id
-    session.close()
+    db.close()
     return rez_id
 
 
-def rezervasyonları_getir(tür=None, limit=10):
-    session = Session()
-    q = session.query(Rezervasyon).filter_by(durum="onaylandı")
-    if tür:
-        q = q.filter_by(tür=tür)
-    sonuçlar = q.order_by(Rezervasyon.tarih.desc()).limit(limit).all()
-    liste = [{
-        "id": r.id,
-        "tür": r.tür,
-        "şehir": r.şehir,
-        "nereden": r.nereden,
-        "nereye": r.nereye,
-        "giriş": r.giriş_tarihi,
-        "çıkış": r.çıkış_tarihi,
-        "kişi": r.kişi
-    } for r in sonuçlar]
-    session.close()
-    return liste
+def get_reservations(type=None, limit=10):
+    db = _db()
+    q = db.query(Reservation).filter_by(status="confirmed")
+    if type:
+        q = q.filter_by(type=type)
+    records = q.order_by(Reservation.created_at.desc()).limit(limit).all()
+    result = [{
+        "id": r.id, "type": r.type, "city": r.city,
+        "from_city": r.from_city, "to_city": r.to_city,
+        "check_in": r.check_in, "check_out": r.check_out,
+        "guests": r.guests
+    } for r in records]
+    db.close()
+    return result
 
 
-def son_rezervasyonu_getir(tür=None):
-    liste = rezervasyonları_getir(tür=tür, limit=1)
-    return liste[0] if liste else None
+def time_expression(target):
+    now = datetime.now()
+    diff_seconds = (target - now).total_seconds()
+    diff_days = (target.date() - now.date()).days
 
-
-# ============ TEST ============
-
-if __name__ == "__main__":
-    tabloları_oluştur()
-
-    not_ekle("Yarın saat 15'te toplantı var", kategori="hatırlatıcı")
-    not_ekle("Market: süt, ekmek, yumurta", kategori="alışveriş")
-
-    notlar = notları_getir()
-    print("\n📝 Notlar:")
-    for n in notlar:
-        print(f"  [{n[0]}] {n[1]} ({n[2]})")
-
-    konuşma_kaydet("user", "Merhaba!")
-    konuşma_kaydet("assistant", "Merhaba! Nasıl yardımcı olabilirim?")
-
-    print("\n💬 Son konuşmalar:")
-    for k in son_konuşmaları_getir():
-        print(f"  {k['rol']}: {k['içerik']}")
-
-    print("\n✅ Tüm testler başarılı!")
+    if diff_seconds < 0:
+        elapsed = abs(diff_seconds)
+        if elapsed < 3600:
+            return f"{int(elapsed/60)} dakika once"
+        elif elapsed < 86400:
+            return f"{int(elapsed/3600)} saat once"
+        elif diff_days == -1:
+            return f"dun saat {target.strftime('%H:%M')}"
+        else:
+            return f"{abs(diff_days)} gun once"
+    else:
+        if diff_days == 0:
+            return f"bugun saat {target.strftime('%H:%M')}"
+        elif diff_days == 1:
+            return f"yarin saat {target.strftime('%H:%M')}"
+        elif diff_days < 7:
+            return f"{diff_days} gun sonra saat {target.strftime('%H:%M')}"
+        elif diff_days < 30:
+            return f"{diff_days//7} hafta sonra"
+        else:
+            return f"{diff_days//30} ay sonra"

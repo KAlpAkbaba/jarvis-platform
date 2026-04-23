@@ -1,4 +1,4 @@
-import re
+ï»¿import re
 from datetime import datetime
 from typing import Optional
 
@@ -47,7 +47,7 @@ class Assistant:
         if self.reservation.dialog_active():
             return self.reservation.continue_dialog(text)
 
-        # Kural tabanli yönlendirme
+        # Kural tabanli yï¿½nlendirme
         intent = self.router.route(text)
 
         if intent == "ses_artir":
@@ -60,12 +60,12 @@ class Assistant:
             return self.media.media_play_pause()
         elif intent == "muzik":
             query = text_lower
-            for k in ["çal", "müzik", "sarki", "youtube", "aç", "oynat"]:
+            for k in ["ï¿½al", "mï¿½zik", "sarki", "youtube", "aï¿½", "oynat"]:
                 query = query.replace(k, "").strip()
-            return self.media.youtube_music(query) if query else self.media.youtube_search("müzik")
+            return self.media.youtube_music(query) if query else self.media.youtube_search("mï¿½zik")
         elif intent == "netflix":
             query = text_lower
-            for k in ["netflix", "aç", "baslat"]:
+            for k in ["netflix", "aï¿½", "baslat"]:
                 query = query.replace(k, "").strip()
             return self.media.netflix_open(query)
         elif intent == "notlar":
@@ -82,8 +82,8 @@ class Assistant:
             for i, r in enumerate(rezervasyonlar, 1):
                 if r["type"] == "otel":
                     cevap += f"{i}. {r['city']} oteli, {r['check_in'].strftime('%d %B') if r['check_in'] else ''}. "
-                elif r["type"] == "uçak":
-                    cevap += f"{i}. {r['from_city']} {r['to_city']} uçusu. "
+                elif r["type"] == "uï¿½ak":
+                    cevap += f"{i}. {r['from_city']} {r['to_city']} uï¿½usu. "
             return cevap.strip()
         elif intent == "not_sil":
             sayi = self.router.extract_number(text)
@@ -93,7 +93,7 @@ class Assistant:
                     return self.notes.delete(sayi)
             if any(k in text_lower for k in ["son", "sonuncu"]):
                 return self.notes.delete_last()
-            return self.notes.list() + " Numara söyleyin."
+            return self.notes.list() + " Numara sï¿½yleyin."
         elif intent == "hava_bildirimi_ac":
             saat_match = re.search(r'(\d{1,2})[:\.]?(\d{2})?', text)
             if saat_match:
@@ -106,7 +106,7 @@ class Assistant:
                         sehir = s.capitalize()
                         break
                 self.weather.configure(city=sehir, time=saat_str, active=True)
-                return f"Hava durumu bildirimi her sabah {saat_str}'de {sehir} için gelecek."
+                return f"Hava durumu bildirimi her sabah {saat_str}'de {sehir} iï¿½in gelecek."
             self.weather.configure(active=True)
             return f"Hava durumu bildirimi aktif."
         elif intent == "hava_bildirimi_kapat":
@@ -125,7 +125,7 @@ class Assistant:
                     if s in text_lower:
                         sehir = s.capitalize()
                 raw = self.search.weather(sehir)
-            elif any(k in text_lower for k in ["haber", "gündem"]):
+            elif any(k in text_lower for k in ["haber", "gï¿½ndem"]):
                 raw = self.search.news(text)
             else:
                 raw = self.search.search(text)
@@ -136,11 +136,11 @@ class Assistant:
             return self.media.handle(text, query)
 
         elif category == "NOT_AL":
-            content = result.get("not_içerik") or text
+            content = result.get("not_iï¿½erik") or text
             return self.notes.add(content, category="genel")
 
         elif category == "HATIRLATICI":
-            content = result.get("not_içerik") or text
+            content = result.get("not_iï¿½erik") or text
             remind_str = result.get("hatirlatma_zamani")
             remind_at = None
             if remind_str:
@@ -157,10 +157,12 @@ class Assistant:
             details = result.get("rezervasyon_detay") or {}
             return self.reservation.handle(text, details)
 
-        return answer if answer else "Anlayamadim, tekrar söyler misiniz?"
+        return answer if answer else "Anlayamadim, tekrar sï¿½yler misiniz?"
 
     def update_history(self, user_text: str, assistant_text: str):
         self.context.add("user", user_text)
         self.context.add("assistant", assistant_text)
         save_conversation("user", user_text)
         save_conversation("assistant", assistant_text)
+
+

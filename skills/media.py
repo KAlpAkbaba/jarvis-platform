@@ -1,4 +1,4 @@
-import webbrowser
+﻿import webbrowser
 import subprocess
 import urllib.parse
 import time
@@ -108,3 +108,4 @@ def medya_komutu_işle(metin: str, medya_sorgu: str = "") -> str:
 # Test
 if __name__ == "__main__":
     print(youtube_aç("Tarkan Şımarık"))
+

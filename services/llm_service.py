@@ -1,4 +1,4 @@
-import requests
+﻿import requests
 import json
 import re
 from datetime import datetime, timedelta
@@ -204,3 +204,4 @@ if __name__ == "__main__":
             print(f"⏰ Zaman: {sonuç['hatırlatma_zamanı']}")
         if sonuç['rezervasyon_detay']:
             print(f"🏨 Rezervasyon: {sonuç['rezervasyon_detay']}")
+

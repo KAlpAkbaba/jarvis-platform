@@ -1,4 +1,4 @@
-import os
+﻿import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 import warnings
@@ -47,3 +47,4 @@ def mikrofon_dinle(süre: int = 5) -> str:
         }
     )
     return result["text"].strip()
+

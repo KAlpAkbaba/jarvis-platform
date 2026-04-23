@@ -1,4 +1,4 @@
-import asyncio
+ï»¿import asyncio
 import re
 from urllib.parse import quote
 from datetime import datetime
@@ -33,20 +33,24 @@ MONTHS = {
     "ocak": 1, "subat": 2, "mart": 3, "nisan": 4,
     "mayis": 5, "haziran": 6, "temmuz": 7, "agustos": 8,
     "eylul": 9, "ekim": 10, "kasim": 11, "aralik": 12,
-    "mayis": 5, "subat": 2, "agustos": 8, "eylül": 9, "kasim": 11, "aralik": 12,
+    "mayis": 5, "subat": 2, "agustos": 8, "eylï¿½l": 9, "kasim": 11, "aralik": 12,
     "mais": 5, "maiz": 5,
 }
 
 NUMBERS = {
     "bir": 1, "iki": 2, "uc": 3, "uch": 3, "dort": 4, "bes": 5,
     "alti": 6, "yedi": 7, "sekiz": 8, "dokuz": 9, "on": 10,
-    "iki": 2, "üç": 3, "dört": 4, "bes": 5, "alti": 6,
+    "iki": 2, "ï¿½ï¿½": 3, "dï¿½rt": 4, "bes": 5, "alti": 6,
 }
 
 
-def normalize(text: str) -> str:
-    tr = {'i':'i','':'i','g':'g','':'g','ü':'u','Ü':'u',
-          's':'s','S':'s','ö':'o','Ö':'o','ç':'c','Ç':'c'}
+def normalize(text):
+    tr = {
+        chr(305): 'i', chr(304): 'i', chr(287): 'g', chr(286): 'g',
+        chr(252): 'u', chr(220): 'u', chr(351): 's', chr(350): 's',
+        chr(246): 'o', chr(214): 'o', chr(231): 'c', chr(199): 'c',
+        'I': 'i',
+    }
     for k, v in tr.items():
         text = text.replace(k, v)
     return text.lower()
@@ -228,12 +232,12 @@ class ReservationSkill:
 
     def handle(self, text: str, details: dict) -> str:
         text_lower = text.lower()
-        kind = details.get("tür", "") if details else ""
+        kind = details.get("tï¿½r", "") if details else ""
 
         if kind == "otel" or any(k in text_lower for k in ["otel", "konaklama"]):
             city = details.get("sehir") if details else None
             check_in = details.get("giris_tarihi") if details else None
-            check_out = details.get("çikis_tarihi") if details else None
+            check_out = details.get("ï¿½ikis_tarihi") if details else None
             guests = details.get("kisi", 2) if details else 2
 
             if not city:
@@ -242,9 +246,9 @@ class ReservationSkill:
 
             self._set("hotel_confirm", {"city": city, "check_in": check_in,
                                          "check_out": check_out, "guests": guests})
-            return f"{city} için otel arayayim, dogru mu?"
+            return f"{city} iï¿½in otel arayayim, dogru mu?"
 
-        elif kind == "uçak" or any(k in text_lower for k in ["uçak", "uçus", "bilet"]):
+        elif kind == "uï¿½ak" or any(k in text_lower for k in ["uï¿½ak", "uï¿½us", "bilet"]):
             from_city = details.get("nereden") or "stanbul"
             to_city = details.get("nereye") if details else None
             date = details.get("tarih") if details else None
@@ -252,15 +256,15 @@ class ReservationSkill:
 
             if not to_city:
                 self._set("flight_to", {"from": from_city, "passengers": passengers})
-                return "Nereye uçmak istiyorsunuz?"
+                return "Nereye uï¿½mak istiyorsunuz?"
 
             if not date:
                 self._set("flight_date", {"from": from_city, "to": to_city, "passengers": passengers})
-                return f"{from_city} ? {to_city} için hangi tarihte uçmak istiyorsunuz?"
+                return f"{from_city} ? {to_city} iï¿½in hangi tarihte uï¿½mak istiyorsunuz?"
 
             return self._search_flights(from_city, to_city, date, passengers)
 
-        return "Otel mi, uçak mi, yoksa restoran mi arayayim?"
+        return "Otel mi, uï¿½ak mi, yoksa restoran mi arayayim?"
 
     def continue_dialog(self, text: str) -> str:
         step = self._dialog["step"]
@@ -270,7 +274,7 @@ class ReservationSkill:
         if step == "hotel_city":
             city = text.strip().title()
             self._set("hotel_confirm", {"city": city})
-            return f"{city} için otel arayayim, dogru mu?"
+            return f"{city} iï¿½in otel arayayim, dogru mu?"
 
         elif step == "hotel_confirm":
             if any(k in text_lower for k in ["evet", "dogru", "tamam", "olur"]):
@@ -282,7 +286,7 @@ class ReservationSkill:
                     return self._search_hotels(city, check_in, check_out, guests)
                 elif check_in:
                     self._set("hotel_checkout", data)
-                    return "Çikis tarihi ne olsun?"
+                    return "ï¿½ikis tarihi ne olsun?"
                 else:
                     self._set("hotel_checkin", data)
                     return "Giris tarihi ne olsun?"
@@ -295,16 +299,16 @@ class ReservationSkill:
             if date:
                 data["check_in"] = date
                 self._set("hotel_checkout", data)
-                return "Çikis tarihi ne olsun?"
-            return "Anlamadim, örnek: 5 Haziran"
+                return "ï¿½ikis tarihi ne olsun?"
+            return "Anlamadim, ï¿½rnek: 5 Haziran"
 
         elif step == "hotel_checkout":
             date = parse_date(text)
             if date:
                 data["check_out"] = date
                 self._set("hotel_guests", data)
-                return "Kaç kisilik oda olsun?"
-            return "Anlamadim, örnek: 8 Haziran"
+                return "Kaï¿½ kisilik oda olsun?"
+            return "Anlamadim, ï¿½rnek: 8 Haziran"
 
         elif step == "hotel_guests":
             guests = parse_number(text)
@@ -325,12 +329,12 @@ class ReservationSkill:
                     guests=data.get("guests", 2), details=hotel
                 )
                 self._set("flight_offer", data)
-                return f"{hotel['name']} seçildi. {data['city']} için uçak bileti de ayarlamami ister misiniz?"
+                return f"{hotel['name']} seï¿½ildi. {data['city']} iï¿½in uï¿½ak bileti de ayarlamami ister misiniz?"
 
             if any(k in text_lower for k in ["hayir", "yok", "istemiyorum"]):
                 self._reset()
                 return "Tamam, rezervasyon tamamlandi."
-            return f"1 ile {len(hotels)} arasinda numara söyleyin."
+            return f"1 ile {len(hotels)} arasinda numara sï¿½yleyin."
 
         elif step == "flight_offer":
             if any(k in text_lower for k in ["evet", "olur", "istiyorum", "tamam"]):
@@ -344,14 +348,14 @@ class ReservationSkill:
             to_city = text.strip().title()
             data["to"] = to_city
             self._set("flight_date", data)
-            return f"{data.get('from', 'stanbul')} ? {to_city} için hangi tarihte uçmak istiyorsunuz?"
+            return f"{data.get('from', 'stanbul')} ? {to_city} iï¿½in hangi tarihte uï¿½mak istiyorsunuz?"
 
         elif step == "flight_date":
             date = parse_date(text)
             if date:
                 return self._search_flights(data.get("from", "stanbul"), data["to"],
                                             date, data.get("passengers", 1))
-            return "Anlamadim, örnek: 5 Haziran"
+            return "Anlamadim, ï¿½rnek: 5 Haziran"
 
         elif step == "flight_select":
             num = parse_number(text) - 1
@@ -359,39 +363,39 @@ class ReservationSkill:
             if 0 <= num < len(flights):
                 flight = flights[num]
                 save_reservation(
-                    type="uçak", from_city=data.get("from"),
+                    type="uï¿½ak", from_city=data.get("from"),
                     to_city=data.get("to"),
                     check_in=datetime.strptime(data["date"], "%Y-%m-%d"),
                     guests=data.get("passengers", 1), details=flight
                 )
                 self._reset()
-                return f"{flight['airline']} seçildi. Rezervasyonunuz kaydedildi!"
+                return f"{flight['airline']} seï¿½ildi. Rezervasyonunuz kaydedildi!"
 
             if any(k in text_lower for k in ["hayir", "yok"]):
                 self._reset()
                 return "Tamam."
-            return "Numara söyleyin."
+            return "Numara sï¿½yleyin."
 
         self._reset()
-        return "Anlayamadim, tekrar söyler misiniz?"
+        return "Anlayamadim, tekrar sï¿½yler misiniz?"
 
     def _search_hotels(self, city: str, check_in: str, check_out: str, guests: int) -> str:
         print(f"Otel araniyor: {city}")
         hotels = sync_run(_booking_search(city, check_in, check_out, guests))
 
         if not hotels:
-            return f"{city} için Booking.com açildi. Ekrandan oteli seçin."
+            return f"{city} iï¿½in Booking.com aï¿½ildi. Ekrandan oteli seï¿½in."
 
         hotels.sort(key=lambda x: float(x["score"].replace(",", ".")) if x["score"] not in ["-", ""] else 0, reverse=True)
         self._set("hotel_select", {"city": city, "check_in": check_in,
                                     "check_out": check_out, "guests": guests, "hotels": hotels})
-        result = f"{city} için en iyi oteller. "
+        result = f"{city} iï¿½in en iyi oteller. "
         for i, h in enumerate(hotels[:3], 1):
             result += f"{i}. {h['name']}, fiyat {h['price']}, puan {h['score']}. "
-        return result + "Hangisini tercih edersiniz? Numara söyleyin."
+        return result + "Hangisini tercih edersiniz? Numara sï¿½yleyin."
 
     def _search_flights(self, from_city: str, to_city: str, date: str, passengers: int) -> str:
-        print(f"Uçus araniyor: {from_city} ? {to_city}")
+        print(f"Uï¿½us araniyor: {from_city} ? {to_city}")
         from_code = airport_code(from_city)
         to_code = airport_code(to_city)
         from_slug = SLUGS.get(from_code, normalize(from_city) + "-ista-" + from_code.lower())
@@ -404,11 +408,13 @@ class ReservationSkill:
         flights = sync_run(_flight_search(from_slug, to_slug, date_fmt, passengers, geotrip))
 
         if not flights:
-            return f"{from_city} ? {to_city} için Enuygun.com açildi."
+            return f"{from_city} ? {to_city} iï¿½in Enuygun.com aï¿½ildi."
 
         self._set("flight_select", {"from": from_city, "to": to_city,
                                      "date": date, "passengers": passengers, "flights": flights})
-        result = f"{from_city} ? {to_city} için en uygun uçuslar. "
+        result = f"{from_city} ? {to_city} iï¿½in en uygun uï¿½uslar. "
         for i, f in enumerate(flights[:3], 1):
             result += f"{i}. {f['airline']}, fiyat {f['price']}. "
         return result + "Hangisini tercih edersiniz?"
+
+

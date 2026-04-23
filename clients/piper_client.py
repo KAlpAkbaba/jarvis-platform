@@ -1,4 +1,4 @@
-import os
+﻿import os
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -63,3 +63,4 @@ if __name__ == "__main__":
     t = time.time()
     konuş("Merhaba! Piper TTS ile konuşuyorum. Çok daha hızlı değil mi?")
     print(f"⚡ TTS süresi: {time.time() - t:.2f}s")
+

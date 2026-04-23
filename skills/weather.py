@@ -1,4 +1,4 @@
-import time
+﻿import time
 import threading
 from datetime import datetime
 from ddgs import DDGS
@@ -80,3 +80,4 @@ def hava_ayarla(saat: str = None, şehir: str = None, aktif: bool = None):
     if aktif is not None:
         hava_ayarları["aktif"] = aktif
     return hava_ayarları
+

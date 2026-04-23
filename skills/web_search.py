@@ -1,4 +1,4 @@
-import requests
+﻿import requests
 from database import bilgi_kaydet, bilgi_ara
 
 SEARXNG_URL = "http://localhost:8080/search"
@@ -66,3 +66,4 @@ def haber_ara(sorgu: str) -> str:
         f"{sorgu} {tarih} son dakika",
         kategori="news"
     )
+
