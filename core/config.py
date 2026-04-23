@@ -1,4 +1,5 @@
-﻿import os
+﻿# -*- coding: utf-8 -*-
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,7 +18,8 @@ class Config:
     whisper_model_id: str = 'openai/whisper-large-v3'
     whisper_language: str = 'turkish'
     stt_record_seconds: int = 5
-    stt_sample_rate: int = 16000
+    stt_sample_rate: int = 48000
+    stt_device_id: int = 11
     stt_silence_threshold: float = 0.01
     piper_model_path: str = str(BASE_DIR / 'tr_TR-dfki-medium.onnx')
     piper_length_scale: float = 0.8
@@ -30,15 +32,4 @@ class Config:
     weather_time: str = '07:00'
     weather_enabled: bool = False
 
-    @classmethod
-    def from_env(cls) -> 'Config':
-        return cls(
-            llm_model=os.getenv('LLM_MODEL', 'qwen2.5:7b'),
-            db_url=os.getenv('DATABASE_URL', 'postgresql://postgres:***REMOVED***@localhost:5432/asistan'),
-            searxng_url=os.getenv('SEARXNG_URL', 'http://localhost:8080/search'),
-            weather_city=os.getenv('WEATHER_CITY', 'Istanbul'),
-        )
-
 config = Config()
-
-

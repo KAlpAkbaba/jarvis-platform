@@ -113,6 +113,28 @@ class Assistant:
             self.weather.configure(active=False)
             return "Hava durumu bildirimi kapatildi."
 
+        # Bilgi sorgusu kontrolu - direkt web aramaya yonlendir
+        bilgi_kelimeleri = ["nedir", "kimdir", "nerede", "nasil", "neden", "anlat",
+                            "acikla", "bilgi ver", "tarihce", "hakkinda", "konusu nedir",
+                            "kim", "ne zaman", "kac", "hangi", "bul", "goster"]
+        baglam_kelimeleri = ["daha detayli", "devam et", "anlat", "acikla", "devam",
+                             "peki", "ya", "ne oldu", "sonra", "neden", "nasil"]
+        from core.router import normalize
+        text_norm = normalize(text_lower)
+
+        # Baglamsal soru - onceki konuyla ilgili
+        if any(k in text_norm for k in baglam_kelimeleri) and len(self.context.messages) > 0:
+            gecmis = self.context.last_n(4)
+            onceki_konu = " ".join([m["content"] for m in gecmis])
+            sorgu = f"{onceki_konu} {text}"
+            raw = self.search.search(sorgu[:200])
+            return self.llm.summarize(text, raw if raw != "Bilgi bulunamadi." else "")
+
+        if any(k in text_norm for k in bilgi_kelimeleri):
+            raw = self.search.search(text)
+            if raw and raw != "Bilgi bulunamadi.":
+                return self.llm.summarize(text, raw)
+
         # LLM ile isle
         result = self.llm.process(text, self.context.to_list())
         category = result["category"] if "category" in result else result.get("kategori", "SOHBET")
@@ -136,8 +158,13 @@ class Assistant:
             return self.media.handle(text, query)
 
         elif category == "NOT_AL":
-            content = result.get("not_i�erik") or text
-            return self.notes.add(content, category="genel")
+            icerik = result.get("not_icerik")
+            if not icerik:
+                import re as _re
+                icerik = _re.sub(r"^(not al|kaydet|yaz)[.:! ]*", "", text, flags=_re.IGNORECASE).strip()
+            if not icerik:
+                icerik = text
+            return self.notes.add(icerik, category="genel")
 
         elif category == "HATIRLATICI":
             content = result.get("not_i�erik") or text

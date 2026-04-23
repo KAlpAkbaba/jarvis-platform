@@ -1,50 +1,43 @@
-﻿import os
+﻿# -*- coding: utf-8 -*-
+import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 import warnings
 warnings.filterwarnings("ignore")
 
 import torch
-import sounddevice as sd
 import numpy as np
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 
-PROMPT = ""  # Artık kullanılmıyor ama main.py uyumluluğu için bırak
 
-print("Whisper Large V3 yükleniyor (GPU)...")
+class WhisperClient:
+    def __init__(self, model_id="openai/whisper-large-v3"):
+        self.model_id = model_id
+        self.pipe = None
+        self._load()
 
-_model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    "openai/whisper-large-v3",
-    torch_dtype=torch.float16,
-    low_cpu_mem_usage=True,
-    use_safetensors=True
-).to("cuda")
+    def _load(self):
+        print(f"Whisper yukleniyor: {self.model_id}")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        dtype = torch.float16 if device == "cuda" else torch.float32
 
-_processor = AutoProcessor.from_pretrained("openai/whisper-large-v3")
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            self.model_id, torch_dtype=dtype,
+            low_cpu_mem_usage=True, use_safetensors=True,
+        ).to(device)
 
-model = pipeline(
-    "automatic-speech-recognition",
-    model=_model,
-    tokenizer=_processor.tokenizer,
-    feature_extractor=_processor.feature_extractor,
-    torch_dtype=torch.float16,
-    device="cuda",
-)
+        processor = AutoProcessor.from_pretrained(self.model_id)
 
-print("Model hazır!")
+        self.pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            torch_dtype=dtype,
+            device=device,
+        )
+        print(f"Whisper hazir! ({device})")
 
-def mikrofon_dinle(süre: int = 5) -> str:
-    print(f"\n🎤 Dinliyorum... ({süre} saniye)")
-    kayıt = sd.rec(int(süre * 16000), samplerate=16000, channels=1, dtype='float32')
-    sd.wait()
-    print("✓ Kayıt tamamlandı, analiz ediliyor...")
-    audio = kayıt.flatten()
-    result = model(
-        audio,
-        generate_kwargs={
-            "language": "turkish",
-            "task": "transcribe",
-        }
-    )
-    return result["text"].strip()
-
+    def transcribe(self, audio, language="turkish"):
+        result = self.pipe(audio, generate_kwargs={"language": language, "task": "transcribe"})
+        return result["text"].strip()

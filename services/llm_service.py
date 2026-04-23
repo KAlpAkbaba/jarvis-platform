@@ -1,207 +1,105 @@
-﻿import requests
+# -*- coding: utf-8 -*-
 import json
 import re
 from datetime import datetime, timedelta
-
-OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL = "qwen2.5:7b"
-
-
-def sistem_prompt_olustur() -> str:
-    şimdi = datetime.now()
-    bugun = şimdi.strftime("%Y-%m-%d")
-    saat = şimdi.strftime("%H:%M")
-    yarın = (şimdi + timedelta(days=1)).strftime("%Y-%m-%d")
-    obur_gun = (şimdi + timedelta(days=2)).strftime("%Y-%m-%d")
-
-    return f"""Sen Türkçe konuşan zeki bir yapay zeka asistanısın.
-Bugünün tarihi: {bugun}, şu anki saat: {saat}
-Yarının tarihi: {yarın}
-Öbür günün tarihi: {obur_gun}
-
-Kullanıcının mesajını analiz et ve SADECE şu JSON formatında yanıt ver:
-
-{{
-    "kategori": "WEB_ARAMA|MEDYA|REZERVASYON|NOT_AL|HATIRLATICI|IOT|SOHBET",
-    "yanıt": "kullanıcıya verilecek kısa Türkçe cevap (HER ZAMAN dolu olmalı)",
-    "not_içerik": "eğer NOT_AL veya HATIRLATICI ise sadece not içeriği, değilse null",
-    "hatırlatma_zamanı": "eğer HATIRLATICI ise 'YYYY-MM-DD HH:MM' formatında TAM TARİH, değilse null",
-    "medya_sorgu": "eğer MEDYA ise aranacak şarkı/video adı, değilse null",
-    "rezervasyon_detay": {{
-        "tür": "otel veya uçak veya restoran veya null",
-        "şehir": "şehir adı veya null",
-        "nereden": "kalkış şehri veya null",
-        "nereye": "varış şehri veya null",
-        "tarih": "YYYY-MM-DD veya null",
-        "giriş_tarihi": "YYYY-MM-DD veya null",
-        "çıkış_tarihi": "YYYY-MM-DD veya null",
-        "kişi": 1
-    }}
-}}
-
-KATEGORİ KURALLARI:
-- NOT_AL: Sadece "not al", "kaydet", "yaz" dediğinde
-- HATIRLATICI: "hatırlat", "alarm", "unutma", "gerekiyor" gibi kelimeler varsa
-- WEB_ARAMA: Bilgi soruları, "nedir", "kaç", "hava", "haber"
-- MEDYA: "çal", "aç", "oynat", "müzik", "film"
-- REZERVASYON: "rezervasyon", "otel", "uçak", "bilet", "restoran", "yer ayırt" gibi kelimeler varsa
-- SOHBET: Selam, nasılsın, fıkra, genel konuşma
-
-TARİH HESAPLAMA (bugün {bugun}):
-- "bugün" → {bugun}
-- "yarın" → {yarın}
-- "öbür gün" → {obur_gun}
-- "saat iki" veya "saat ikide" → 14:00
-- "saat üç" veya "saat üçte" → 15:00
-- "saat on iki" veya "öğlen" → 12:00
-- "akşam" → 19:00
-- "sabah" → 09:00
-- "12-15" veya "12.15" → 12:15
-- "14-30" veya "14.30" → 14:30
-
-NOT İÇERİK KURALLARI:
-- "hatırlat", "not al", "kaydet", "lütfen", "gerekiyor", "lazım" gibi komut kelimelerini çıkar
-- Sadece asıl içeriği kısa ve öz yaz
-
-REZERVASYON KURALLARI:
-- "İstanbul'da otel ara" → tür: otel, şehir: İstanbul
-- "Ankara'ya uçak" → tür: uçak, nereden: İstanbul (varsayılan), nereye: Ankara
-- "Yarın akşam restoran" → tür: restoran, tarih: {yarın}
-- Kişi sayısı belirtilmezse 1 yaz
-- Tarih belirtilmezse null yaz
-
-GENEL ÖRNEKLER:
-- "Yarın saat 2de toplantı hatırlat" → {{"kategori":"HATIRLATICI","yanıt":"Hatırlatıcı kaydedildi.","not_içerik":"Toplantı","hatırlatma_zamanı":"{yarın} 14:00","medya_sorgu":null,"rezervasyon_detay":null}}
-- "Not al market alışverişi" → {{"kategori":"NOT_AL","yanıt":"Notunuzu kaydettim.","not_içerik":"market alışverişi","hatırlatma_zamanı":null,"medya_sorgu":null,"rezervasyon_detay":null}}
-- "Tarkan çal" → {{"kategori":"MEDYA","yanıt":"Tarkan çalıyor.","not_içerik":null,"hatırlatma_zamanı":null,"medya_sorgu":"Tarkan","rezervasyon_detay":null}}
-- "İstanbul'da 3 gecelik otel ara" → {{"kategori":"REZERVASYON","yanıt":"İstanbul otelleri aranıyor.","not_içerik":null,"hatırlatma_zamanı":null,"medya_sorgu":null,"rezervasyon_detay":{{"tür":"otel","şehir":"İstanbul","nereden":null,"nereye":null,"tarih":null,"giriş_tarihi":null,"çıkış_tarihi":null,"kişi":1}}}}
-- "Ankara'ya uçak bileti" → {{"kategori":"REZERVASYON","yanıt":"Ankara uçuşları aranıyor.","not_içerik":null,"hatırlatma_zamanı":null,"medya_sorgu":null,"rezervasyon_detay":{{"tür":"uçak","şehir":null,"nereden":"İstanbul","nereye":"Ankara","tarih":null,"giriş_tarihi":null,"çıkış_tarihi":null,"kişi":1}}}}
-- "Nasılsın" → {{"kategori":"SOHBET","yanıt":"İyiyim, sen?","not_içerik":null,"hatırlatma_zamanı":null,"medya_sorgu":null,"rezervasyon_detay":null}}
-
-Sadece JSON döndür. yanıt alanı HİÇBİR ZAMAN boş olamaz."""
+from typing import List, Dict
+from clients.ollama_client import OllamaClient
+from core.config import config
 
 
-def llm_yanıt(kullanıcı_mesajı: str, geçmiş: list = []) -> dict:
-    sistem = sistem_prompt_olustur()
+class LLMService:
+    def __init__(self):
+        self.client = OllamaClient(model=config.llm_model)
 
-    mesajlar = [{"role": "system", "content": sistem}]
-    mesajlar.extend(geçmiş)
-    mesajlar.append({"role": "user", "content": kullanıcı_mesajı})
+    def _system_prompt(self):
+        now = datetime.now()
+        today = now.strftime("%Y-%m-%d")
+        saat = now.strftime("%H:%M")
+        yarin = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+        oburgunu = (now + timedelta(days=2)).strftime("%Y-%m-%d")
+        return f"""Sen Turkce konusan zeki bir yapay zeka asistansin.
+Bugun: {today}, Saat: {saat}, Yarin: {yarin}, Oburgunu: {oburgunu}
 
-    try:
-        response = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": MODEL,
-                "messages": mesajlar,
-                "stream": False,
-                "options": {
-                    "num_predict": 400,  # 200'den 400'e çıkar
-                    "temperature": 0.7,
-                    "top_k": 20,
-                    "top_p": 0.9,
-                    "repeat_penalty": 1.1,
-                    "num_ctx": 4096  # 2048'den 4096'ya çıkar
-                }
-            },
-            timeout=30
-        )
+Asagidaki JSON formatinda yanit ver. Baska hicbir sey yazma:
+{{"kategori":"SOHBET","yanit":"kisa Turkce cevap","not_icerik":null,"hatirlatma_zamani":null,"medya_sorgu":null,"rezervasyon_detay":{{"tur":null,"sehir":null,"nereden":null,"nereye":null,"tarih":null,"giris_tarihi":null,"cikis_tarihi":null,"kisi":1}}}}
 
-        yanıt_metni = response.json()["message"]["content"].strip()
-        yanıt_metni = re.sub(r"```json|```", "", yanıt_metni).strip()
+KATEGORI KURALLARI (dikkatli sec):
+- NOT_AL: "not al", "kaydet", "yaz" ile baslayan mesajlar
+- HATIRLATICI: "hatirlatma", "alarm", "beni uyard" iceren mesajlar
+- WEB_ARAMA: "kim", "ne", "nedir", "nasil", "neden", "hava", "haber", "kac", "kacinci", "hangi", "nerede", "tarih", "bilgi ver", "anlat", "acikla" iceren TUM bilgi sorulari
+- MEDYA: "cal", "ac", "oynat", "muzik", "netflix", "youtube"
+- REZERVASYON: "otel", "ucak", "bilet", "rezervasyon"
+- SOHBET: SADECE selamlasma ("merhaba", "nasilsin", "naber", "iyi gunler") ve kisa sohbet
 
-        json_match = re.search(r'\{.*\}', yanıt_metni, re.DOTALL)
-        if json_match:
-            yanıt_metni = json_match.group()
+ONEMLI: Bilgi sorulari (kim, ne, nedir, nasil, neden, anlat, acikla) MUTLAKA WEB_ARAMA olmali!
 
-        veri = json.loads(yanıt_metni)
+NOT_AL icin not_icerik alani sadece kaydedilecek icerigi icermeli. Ornek:
+Kullanici: "not al yarin toplantim var" -> not_icerik: "yarin toplantim var"
 
-        return {
-            "kategori": veri.get("kategori", "SOHBET"),
-            "yanıt": veri.get("yanıt") or "Anlıyorum.",
-            "not_içerik": veri.get("not_içerik", None),
-            "hatırlatma_zamanı": veri.get("hatırlatma_zamanı", None),
-            "medya_sorgu": veri.get("medya_sorgu", None),
-            "rezervasyon_detay": veri.get("rezervasyon_detay", None),
-            "ham": yanıt_metni
-        }
+Sadece JSON dondur, baska hicbir aciklama yapma."""
 
-    except requests.exceptions.ConnectionError:
-        return {
-            "kategori": "HATA",
-            "yanıt": "Ollama bağlantısı kurulamadı.",
-            "not_içerik": None,
-            "hatırlatma_zamanı": None,
-            "medya_sorgu": None,
-            "rezervasyon_detay": None,
-            "ham": ""
-        }
-    except json.JSONDecodeError:
+    def process(self, text, history=None):
+        history = history or []
+        messages = [{"role": "system", "content": self._system_prompt()}]
+        messages.extend(history[-6:])
+        messages.append({"role": "user", "content": text})
         try:
-            response2 = requests.post(
-                OLLAMA_URL,
-                json={
-                    "model": MODEL,
-                    "messages": [
-                        {"role": "system", "content": "Sen yardımcı bir Türkçe asistansın. Kısa ve net cevap ver."},
-                        {"role": "user", "content": kullanıcı_mesajı}
-                    ],
-                    "stream": False
-                },
-                timeout=30
+            raw = self.client.chat(messages,
+                num_predict=config.llm_num_predict,
+                temperature=config.llm_temperature,
+                top_k=config.llm_top_k,
+                top_p=config.llm_top_p,
+                repeat_penalty=config.llm_repeat_penalty,
+                num_ctx=config.llm_num_ctx)
+            
+            # JSON temizle
+            raw = raw.strip()
+            raw = re.sub(r"`json|`", "", raw).strip()
+            
+            # JSON bul
+            match = re.search(r'\{.*\}', raw, re.DOTALL)
+            if match:
+                raw = match.group()
+            
+            data = json.loads(raw)
+            return {
+                "kategori": data.get("kategori", "SOHBET"),
+                "yanit": data.get("yanit") or "Anliyorum.",
+                "not_icerik": data.get("not_icerik"),
+                "hatirlatma_zamani": data.get("hatirlatma_zamani"),
+                "medya_sorgu": data.get("medya_sorgu"),
+                "rezervasyon_detay": data.get("rezervasyon_detay"),
+            }
+        except json.JSONDecodeError:
+            # JSON parse basarisiz — sohbet olarak isle
+            try:
+                sohbet = self.client.chat([
+                    {"role": "system", "content": "Sen yardimci bir Turkce asistansin. Kisa ve oz yanit ver."},
+                    {"role": "user", "content": text}
+                ], num_predict=200)
+                return {"kategori": "SOHBET", "yanit": sohbet,
+                        "not_icerik": None, "hatirlatma_zamani": None,
+                        "medya_sorgu": None, "rezervasyon_detay": None}
+            except:
+                return {"kategori": "SOHBET", "yanit": "Evet, sizi dinliyorum.",
+                        "not_icerik": None, "hatirlatma_zamani": None,
+                        "medya_sorgu": None, "rezervasyon_detay": None}
+        except Exception as e:
+            return {"kategori": "SOHBET", "yanit": "Bir sorun olustu, tekrar deneyin.",
+                    "not_icerik": None, "hatirlatma_zamani": None,
+                    "medya_sorgu": None, "rezervasyon_detay": None}
+
+    def summarize(self, question, search_result):
+        sistem = "Sen yalnizca TURKCE konusan bir yapay zeka asistansin. KESINLIKLE baska dil kullanma. Kisa, net ve dogru bilgi ver."
+        if search_result and len(search_result) > 20:
+            prompt = f"Soru: {question}\nBilgi: {search_result[:600]}\nYukaridaki bilgiyi kullanarak soruyu TURKCE olarak 2-4 cumleyle cevapla."
+        else:
+            prompt = f"Soru: {question}\nBu soruyu TURKCE olarak 2-4 cumleyle cevapla."
+        try:
+            return self.client.chat(
+                [{"role": "system", "content": sistem}, {"role": "user", "content": prompt}],
+                num_predict=400, temperature=0.3
             )
-            düz_yanıt = response2.json()["message"]["content"].strip()
-            return {
-                "kategori": "SOHBET",
-                "yanıt": düz_yanıt[:300],
-                "not_içerik": None,
-                "hatırlatma_zamanı": None,
-                "medya_sorgu": None,
-                "rezervasyon_detay": None,
-                "ham": düz_yanıt
-            }
         except:
-            return {
-                "kategori": "SOHBET",
-                "yanıt": "Şu an düşünüyorum, tekrar sorar mısınız?",
-                "not_içerik": None,
-                "hatırlatma_zamanı": None,
-                "medya_sorgu": None,
-                "rezervasyon_detay": None,
-                "ham": ""
-            }
-    except Exception as e:
-        return {
-            "kategori": "HATA",
-            "yanıt": f"Hata: {str(e)}",
-            "not_içerik": None,
-            "hatırlatma_zamanı": None,
-            "medya_sorgu": None,
-            "rezervasyon_detay": None,
-            "ham": ""
-        }
-
-
-if __name__ == "__main__":
-    testler = [
-        "İstanbul'da 2 gecelik otel ara",
-        "Ankara'ya yarın uçak bileti",
-        "Yarın akşam 2 kişilik restoran rezervasyonu",
-        "Yarın saat 2de toplantım var hatırlat",
-        "Not al market alışverişi",
-        "Tarkan çal",
-        "Nasılsın",
-    ]
-
-    for test in testler:
-        print(f"\n👤 {test}")
-        sonuç = llm_yanıt(test)
-        print(f"📂 Kategori: {sonuç['kategori']}")
-        print(f"🤖 Yanıt: {sonuç['yanıt']}")
-        if sonuç['not_içerik']:
-            print(f"📝 Not: {sonuç['not_içerik']}")
-        if sonuç['hatırlatma_zamanı']:
-            print(f"⏰ Zaman: {sonuç['hatırlatma_zamanı']}")
-        if sonuç['rezervasyon_detay']:
-            print(f"🏨 Rezervasyon: {sonuç['rezervasyon_detay']}")
+            return "Bilgi bulunamadi."
 

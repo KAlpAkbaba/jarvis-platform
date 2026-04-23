@@ -1,66 +1,52 @@
-﻿import os
-
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
-import warnings
-
-warnings.filterwarnings("ignore")
-
+﻿# -*- coding: utf-8 -*-
+import os
 import wave
 import io
-import sounddevice as sd
 import numpy as np
+import sounddevice as sd
 from piper.voice import PiperVoice
 from piper.config import SynthesisConfig
 
-print("TTS modeli yükleniyor (Piper)...")
-voice = PiperVoice.load(
-    r"E:\Project\tr_TR-dfki-medium.onnx",
-    use_cuda=False
-)
-syn_config = SynthesisConfig(length_scale=0.8)
-print("TTS hazır!")
 
+class PiperClient:
+    def __init__(self, model_path=r"E:\Project\tr_TR-dfki-medium.onnx", length_scale=0.8):
+        self.model_path = model_path
+        self.voice = None
+        self.syn_config = None
+        self._load(length_scale)
 
-def konuş(metin: str):
-    metin = metin.replace('"', '').replace("'", '')
-    metin = metin.replace('!', '.').replace('?', '.')
+    def _load(self, length_scale):
+        print("TTS modeli yukleniyor (Piper)...")
+        self.voice = PiperVoice.load(self.model_path, use_cuda=False)
+        self.syn_config = SynthesisConfig(length_scale=length_scale)
+        print("TTS hazir!")
 
-    cümleler = [c.strip() for c in metin.split(".") if len(c.strip()) > 2]
-    if not cümleler:
-        return
+    def synthesize(self, text):
+        text = text.replace('"', '').replace("'", '').replace('!', '.').replace('?', '.')
+        sentences = [s.strip() for s in text.split('.') if len(s.strip()) > 2]
+        all_audio = []
+        sample_rate = self.voice.config.sample_rate
 
-    tüm_ses = []
-    sample_rate = 22050
+        for sentence in sentences:
+            try:
+                buf = io.BytesIO()
+                wf = wave.open(buf, 'wb')
+                self.voice.synthesize_wav(sentence, wf, syn_config=self.syn_config)
+                wf.close()
+                buf.seek(0)
+                with wave.open(buf, 'rb') as wav:
+                    frames = wav.readframes(wav.getnframes())
+                    sample_rate = wav.getframerate()
+                if frames:
+                    audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+                    all_audio.extend(audio.tolist())
+            except Exception as e:
+                print(f"TTS hatasi: {e}")
 
-    for cümle in cümleler:
-        try:
-            buf = io.BytesIO()
-            wav_file = wave.open(buf, "wb")
-            voice.synthesize_wav(cümle, wav_file, syn_config=syn_config)
-            wav_file.close()
+        return np.array(all_audio), sample_rate
 
-            buf.seek(0)
-            with wave.open(buf, "rb") as wav:
-                frames = wav.readframes(wav.getnframes())
-                sample_rate = wav.getframerate()
-
-            if frames:
-                ses = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-                tüm_ses.extend(ses.tolist())
-        except Exception as e:
-            print(f"⚠️ TTS hatası: {e}")
-            continue
-
-    if tüm_ses:
-        sd.play(np.array(tüm_ses), sample_rate)
-        sd.wait()
-
-
-if __name__ == "__main__":
-    import time
-
-    t = time.time()
-    konuş("Merhaba! Piper TTS ile konuşuyorum. Çok daha hızlı değil mi?")
-    print(f"⚡ TTS süresi: {time.time() - t:.2f}s")
-
+    def speak(self, text):
+        audio, sr = self.synthesize(text)
+        if len(audio) > 0:
+            sd.play(audio, sr)
+            sd.wait()
