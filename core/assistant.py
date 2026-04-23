@@ -124,11 +124,14 @@ class Assistant:
 
         # Baglamsal soru - onceki konuyla ilgili
         if any(k in text_norm for k in baglam_kelimeleri) and len(self.context.messages) > 0:
-            gecmis = self.context.last_n(4)
-            onceki_konu = " ".join([m["content"] for m in gecmis])
-            sorgu = f"{onceki_konu} {text}"
-            raw = self.search.search(sorgu[:200])
-            return self.llm.summarize(text, raw if raw != "Bilgi bulunamadi." else "")
+            gecmis = self.context.last_n(6)
+            gecmis_metin = "\n".join([f"{m['role']}: {m['content']}" for m in gecmis])
+            prompt = f"""Onceki konusma:
+{gecmis_metin}
+
+Kullanici simdi soruyor: {text}
+Onceki konusmayi dikkate alarak TURKCE olarak 3-5 cumleyle detayli cevap ver."""
+            return self.llm.summarize(text, prompt)
 
         if any(k in text_norm for k in bilgi_kelimeleri):
             raw = self.search.search(text)

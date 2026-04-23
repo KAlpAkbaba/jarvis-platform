@@ -98,7 +98,7 @@ Sadece JSON dondur, baska hicbir aciklama yapma."""
         try:
             return self.client.chat(
                 [{"role": "system", "content": sistem}, {"role": "user", "content": prompt}],
-                num_predict=400, temperature=0.3
+                num_predict=800, temperature=0.3
             )
         except:
             return "Bilgi bulunamadi."

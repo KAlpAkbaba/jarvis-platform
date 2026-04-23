@@ -6,7 +6,7 @@ KEYWORD_RULES = {
     "ses_artir": ["sesi artir", "sesi ac", "ses ac", "ses artir"],
     "ses_azalt": ["sesi azalt", "sesi kis", "ses kis", "ses azalt"],
     "ses_kapat": ["sesi kapat", "sustur", "ses kapat"],
-    "medya_durdur": ["durdur", "devam et", "pause"],
+    "medya_durdur": ["durdur", "pause", "muzigi durdur"],
     "netflix": ["netflix"],
     "muzik": ["cal", "muzik cal", "sarki cal", "youtube"],
     "notlar": ["notlarim", "notlari goster", "notlarimi", "notlar", "notlari oku"],

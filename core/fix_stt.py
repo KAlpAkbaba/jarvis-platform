@@ -1,4 +1,7 @@
-# -*- coding: utf-8 -*-
+﻿import sys
+sys.path.insert(0, r'E:\jarvis-platform')
+
+new_stt = '''# -*- coding: utf-8 -*-
 import numpy as np
 import sounddevice as sd
 import scipy.signal as signal
@@ -21,7 +24,7 @@ class STTService:
         min_chunks = int(min_seconds / 0.1)
         max_chunks = int(max_seconds / 0.1)
 
-        print("\nDinliyorum...")
+        print("\\nDinliyorum...")
         all_audio = []
         silent_count = 0
         speaking_started = False
@@ -66,3 +69,8 @@ class STTService:
         if audio is None:
             return ""
         return self.transcribe(audio).strip()
+'''
+
+with open("services/stt_service.py", "w", encoding="utf-8") as f:
+    f.write(new_stt)
+print("stt_service.py guncellendi!")
