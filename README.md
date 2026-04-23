@@ -1,12 +1,29 @@
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Docker](https://img.shields.io/badge/docker-ready-green)
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
+<p align="center">
+  <b>⚡ Fully Local • 🧠 LLM Powered • 🔒 Privacy First</b>
+</p>
 
 # Jarvis Platform
 
 A modular Turkish AI assistant platform supporting voice, text, and API-based interaction.
 
 This project combines speech recognition, local LLM-based intent classification, multi-skill routing, and text-to-speech synthesis into a single extensible system.
+
+---
+
+## ❓ Why Jarvis?
+
+Most AI assistants rely heavily on cloud services, raising concerns about:
+
+- Privacy
+- Latency
+- Cost
+- Dependency on external APIs
+
+Jarvis Platform solves this by running entirely on local infrastructure,
+providing a fast, private, and extensible AI assistant experience.
 
 ---
 
@@ -17,21 +34,16 @@ capable of replacing cloud-based assistants by running entirely on user-owned in
 
 ---
 
-## 🚀 Features
+## 🚀 Key Capabilities
 
-- 🎤 Real-time Speech-to-Text (Whisper Large v3, GPU-accelerated)
-- 🧠 Offline-first LLM intent classification (Ollama, privacy-friendly)
-- 🔊 Text-to-Speech (Piper / XTTS)
-- 🧩 Modular skill system:
-  - Notes & reminders
-  - Media control (YouTube, etc.)
-  - Web search (SearXNG / fallback)
-  - Weather information
-  - Reservation workflows
-- 🌐 WebSocket & API support
-- 🖥️ CLI-based assistant interface
-- 🗄️ PostgreSQL-backed persistence
-- 🔁 Context-aware conversation flow
+Jarvis Platform provides a complete local AI assistant stack:
+
+- 🎙 Real-time voice interaction (STT + TTS)
+- 🧠 Local intelligence (LLM-based intent understanding)
+- 🔀 Modular skill routing system
+- 🌐 Web search & automation (SearXNG + Playwright)
+- 🗂 Persistent memory (PostgreSQL-backed)
+- ⚡ Low-latency offline execution
 
 ---
 
@@ -39,8 +51,19 @@ capable of replacing cloud-based assistants by running entirely on user-owned in
 
 ![Architecture](docs/jarvis_platform_v3.svg)
 
-This diagram represents the full voice-to-action pipeline:
-from user input (voice/text) to intent classification, skill execution, and audio response generation.
+### 🧠 How it Works
+
+The system follows a real-time voice-to-action pipeline:
+
+1. User input is captured via microphone, web, or mobile
+2. Audio is processed using Whisper (STT)
+3. Intent is classified via local LLM (Ollama)
+4. Router dispatches the request to the appropriate skill
+5. Skill executes (search, reservation, notes, etc.)
+6. Response is generated and converted to speech (TTS)
+7. Output is delivered via audio or text
+
+This architecture ensures low-latency, fully local, and privacy-first operation.
 
 ---
 
@@ -94,7 +117,7 @@ POSTGRES_PASSWORD=your_password
 
 OLLAMA_HOST=http://localhost:11434
 
-##🐳 Run with Docker
+🐳 Run with Docker
 
 
 docker-compose up -d
@@ -105,7 +128,7 @@ PostgreSQL
 
 SearXNG (local search engine)
 
-##▶️ Running the Assistant
+▶️ Running the Assistant
 
 
 CLI mode
@@ -188,7 +211,7 @@ Docker
    - [] Real-time streaming voice interaction
    - [] Long-term memory & personalization engine
 
-##⚠️ Notes
+⚠️ Notes
 
  
 Requires local model setup (Whisper, Ollama, TTS)
@@ -198,6 +221,6 @@ Some features depend on external services
 Optimized for Turkish language use
 
 
-##👤 Author
+👤 Author
 
 Developed by Kadir Alp Akbaba
