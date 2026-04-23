@@ -10,10 +10,17 @@ This project combines speech recognition, local LLM-based intent classification,
 
 ---
 
+## 🎯 Vision
+
+Jarvis Platform aims to become a fully local, privacy-first AI assistant
+capable of replacing cloud-based assistants by running entirely on user-owned infrastructure.
+
+---
+
 ## 🚀 Features
 
-- 🎤 Speech-to-Text (Whisper-based)
-- 🧠 Local LLM intent classification (Ollama)
+- 🎤 Real-time Speech-to-Text (Whisper Large v3, GPU-accelerated)
+- 🧠 Offline-first LLM intent classification (Ollama, privacy-friendly)
 - 🔊 Text-to-Speech (Piper / XTTS)
 - 🧩 Modular skill system:
   - Notes & reminders
@@ -31,6 +38,9 @@ This project combines speech recognition, local LLM-based intent classification,
 ## 🧠 Architecture
 
 ![Architecture](docs/jarvis_platform_v3.svg)
+
+This diagram represents the full voice-to-action pipeline:
+from user input (voice/text) to intent classification, skill execution, and audio response generation.
 
 ---
 
@@ -147,18 +157,36 @@ Docker
 📌 Roadmap
 
 
- User authentication
- 
- Multi-language support
- 
- Mobile interface
- 
- Plugin system
- 
- Real-time streaming audio
- 
- AI memory improvements
- 
+## 📌 Roadmap
+
+✅ Completed
+
+   -  [x] Real-time Speech-to-Text (Whisper Large v3, GPU)
+   -  [x] Text-to-Speech (Piper TTS)
+   -  [x] Local LLM intent classification (Ollama Qwen 2.5 7B)
+   -  [x] Web search integration (SearXNG)
+   -  [x] Notes & reminders system (PostgreSQL-backed)
+   -  [x] Reservation workflows (Flight & Hotel via Playwright)
+   -  [x] Weather information service
+   -  [x] Web interface (FastAPI + ngrok)
+   -  [x] Modular architecture (Jarvis Platform core)
+   -  [x] Wake word detection (OpenWakeWord)
+   -  [x] Context-aware conversation improvements
+          
+🚧 In Progress
+
+   - [] IoT integration (Home Assistant support)
+   - [] Personal profile & memory system
+   - [] Proactive assistant behavior
+   - [] Multi-language support (EN / TR / DE)
+   - [] Face recognition / identity awareness
+
+🎯 Future Vision
+   - [] Fully offline, privacy-first AI assistant
+   - [] Mobile companion application
+   - [] Plugin ecosystem (3rd-party skills)
+   - [] Real-time streaming voice interaction
+   - [] Long-term memory & personalization engine
 
  ⚠️ Notes
 
