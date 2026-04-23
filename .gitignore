@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+*.onnx
+*.pth
+*.wav
+*.mp3
+.DS_Store
+*.log
