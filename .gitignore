@@ -10,3 +10,4 @@ venv/
 *.log
 chromedriver.exe
 benim_sesim.wav
+.env
