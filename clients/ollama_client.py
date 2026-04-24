@@ -2,7 +2,7 @@
 from typing import List, Dict, Optional
 
 
-OLLAMA_URL = 'http://localhost:11434/api/chat'
+OLLAMA_URL = 'http://172.17.0.1:11434/api/chat'
 DEFAULT_MODEL = 'qwen2.5:7b'
 
 
@@ -39,7 +39,7 @@ class OllamaClient:
 
     def is_available(self):
         try:
-            requests.get('http://localhost:11434', timeout=3)
+            requests.get('http://172.17.0.1:11434', timeout=3)
             return True
         except:
             return False

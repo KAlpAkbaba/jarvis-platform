@@ -23,8 +23,8 @@ class Config:
     stt_silence_threshold: float = 0.01
     piper_model_path: str = str(BASE_DIR / 'tr_TR-dfki-medium.onnx')
     piper_length_scale: float = 0.8
-    db_url: str = 'postgresql://postgres:***REMOVED***@localhost:5432/asistan'
-    searxng_url: str = 'http://localhost:8080/search'
+    db_url: str = 'postgresql://postgres:***REMOVED***@postgres:5432/asistan'
+    searxng_url: str = 'http://searxng:8080/search'
     api_host: str = '0.0.0.0'
     api_port: int = 8000
     chromedriver_path: str = str(BASE_DIR / 'chromedriver.exe')

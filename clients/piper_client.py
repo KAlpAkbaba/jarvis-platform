@@ -1,8 +1,7 @@
-# Sunucu modunda TTS devre disi
 class PiperClient:
-    def __init__(self, *args, **kwargs):
+    def __init__(self, **kwargs):
         pass
-    def speak(self, text: str):
+    def speak(self, text):
         pass
-    def synthesize(self, text: str):
-        return [], 22050
+    def synthesize(self, text):
+        return None, None

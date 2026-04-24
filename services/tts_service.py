@@ -1,13 +1,7 @@
-# -*- coding: utf-8 -*-
-
 class TTSService:
     def __init__(self):
-        self.client = None
-        print("TTS: Sunucu modunda ses cikisi devre disi.")
-
-    def speak(self, text: str):
-        # Sunucuda ses cikisi yok - client tarafinda yapilacak
-        print(f"TTS [server]: {text}")
-
-    def synthesize(self, text: str):
+        print("TTS: Sunucu modunda.")
+    def speak(self, text):
+        print(f"TTS: {text}")
+    def synthesize(self, text):
         return None, None
