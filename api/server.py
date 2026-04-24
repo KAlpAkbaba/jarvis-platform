@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from core.config import config
 
+from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(title="Jarvis Platform", version="1.0.0")
 
 try:
@@ -18,6 +19,13 @@ except:
 
 active_connections = []
 
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 async def root():

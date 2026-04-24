@@ -3,7 +3,7 @@ sys.path.insert(0, r'E:\jarvis-platform')
 
 new_stt = '''# -*- coding: utf-8 -*-
 import numpy as np
-import sounddevice as sd
+# import sounddevice as sd
 import scipy.signal as signal
 from collections import deque
 from clients.whisper_client import WhisperClient

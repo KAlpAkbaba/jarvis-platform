@@ -38,7 +38,6 @@ class Assistant:
 
     def speak(self, text: str):
         print(f"Asistan: {text}")
-        self.tts.speak(text)
 
     def process(self, text: str) -> str:
         text_lower = text.lower().strip()

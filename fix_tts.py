@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+content = """# -*- coding: utf-8 -*-
 
 class TTSService:
     def __init__(self):
@@ -11,3 +11,7 @@ class TTSService:
 
     def synthesize(self, text: str):
         return None, None
+"""
+with open('services/tts_service.py', 'w') as f:
+    f.write(content)
+print('tts_service.py guncellendi!')
