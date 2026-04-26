@@ -42,6 +42,50 @@ class Assistant:
     def process(self, text: str) -> str:
         text_lower = text.lower().strip()
 
+        # Takvim kontrolu
+        takvim_goster = ["takvim", "etkinlik", "randevu", "ajanda"]
+        takvim_ekle_kw = ["takvime ekle", "etkinlik ekle", "randevu ekle"]
+        if any(k in text_lower for k in takvim_ekle_kw):
+            try:
+                from google.oauth2.credentials import Credentials
+                from googleapiclient.discovery import build
+                from datetime import datetime, timedelta
+                creds = Credentials.from_authorized_user_file("/app/data/google_token.json", scopes=["https://www.googleapis.com/auth/calendar"])
+                service = build("calendar", "v3", credentials=creds)
+                dt_start = (datetime.now() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+                dt_end = dt_start.replace(hour=11)
+                event = {"summary": text, "start": {"dateTime": dt_start.isoformat(), "timeZone": "Europe/Istanbul"}, "end": {"dateTime": dt_end.isoformat(), "timeZone": "Europe/Istanbul"}}
+                service.events().insert(calendarId="primary", body=event).execute()
+                return "Etkinlik takvime eklendi!"
+            except Exception as cal_err:
+                return "Takvim hatasi: " + str(cal_err)
+        elif any(k in text_lower for k in takvim_goster):
+            try:
+                from google.oauth2.credentials import Credentials
+                from googleapiclient.discovery import build
+                from datetime import datetime, timedelta
+                creds = Credentials.from_authorized_user_file("/app/data/google_token.json", scopes=["https://www.googleapis.com/auth/calendar"])
+                service = build("calendar", "v3", credentials=creds)
+                now = datetime.utcnow().isoformat() + "Z"
+                end_dt = (datetime.utcnow() + timedelta(days=7)).isoformat() + "Z"
+                events = service.events().list(calendarId="primary", timeMin=now, timeMax=end_dt, maxResults=10, singleEvents=True, orderBy="startTime").execute().get("items", [])
+                if not events:
+                    return "Takvimde yaklasan etkinlik yok."
+                lines = ["Yaklasan etkinlikleriniz:"]
+                for ev in events:
+                    ev_title = ev.get("summary", "Basliksiz")
+                    ev_start = ev.get("start", {}).get("dateTime", ev.get("start", {}).get("date", ""))
+                    try:
+                        ev_dt = datetime.fromisoformat(ev_start.replace("Z", "+00:00"))
+                        ev_start = ev_dt.strftime("%d %B %Y %H:%M")
+                    except Exception:
+                        pass
+                    lines.append("- " + ev_start + " : " + ev_title)
+                return chr(10).join(lines)
+            except Exception as cal_err2:
+                return "Takvim hatasi: " + str(cal_err2)
+
+
         # Aktif rezervasyon diyalogu
         if self.reservation.dialog_active():
             return self.reservation.continue_dialog(text)

@@ -14,3 +14,11 @@ pyyaml
 python-dotenv
 python-multipart
 faster-whisper
+elevenlabs
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+msal
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
