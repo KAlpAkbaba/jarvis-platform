@@ -53,6 +53,15 @@ async def websocket_endpoint(websocket: WebSocket):
             if not text:
                 continue
             try:
+                # Takvim kontrolu - WebSocket icin
+                from core.router import normalize
+                text_norm_ws = normalize(text.lower())
+                takvim_goster_ws = ["takvim", "etkinlik", "randevu", "ajanda"]
+                takvim_ekle_ws = ["takvime ekle", "etkinlik ekle", "randevu ekle"]
+                if any(k in text_norm_ws for k in takvim_ekle_ws) or any(k in text_norm_ws for k in takvim_goster_ws):
+                    cal_response = assistant.process(text)
+                    await websocket.send_text(json.dumps({"type": "response", "text": cal_response}))
+                    continue
                 result = assistant.llm.process(text, assistant.context.to_list())
                 category = result.get("kategori", "SOHBET")
                 text_norm = normalize(text)
@@ -331,5 +340,87 @@ async def add_event(request: dict):
         start = datetime.fromisoformat(start_str)
         success = _calendar.add_google_event(title, start, description=description)
         return {"status": "ok" if success else "error"}
+    except Exception as e:
+        return {"error": str(e)}
+
+import msal
+
+OUTLOOK_CLIENT_ID = "9b1ecc4d-c0cc-4123-8ec1-522c8f278ecf"
+OUTLOOK_TENANT_ID = "46642cdf-f4a1-45ee-bd35-1defe8fd90a0"
+OUTLOOK_CLIENT_SECRET = "***REMOVED***"
+OUTLOOK_SCOPES = ["Calendars.ReadWrite", "User.Read"]
+_outlook_token = None
+_outlook_flow = None
+
+@app.get("/calendar/auth/outlook")
+async def outlook_auth():
+    global _outlook_flow
+    try:
+        app_msal = msal.PublicClientApplication(
+            OUTLOOK_CLIENT_ID,
+            authority=f"https://login.microsoftonline.com/common"
+        )
+        _outlook_flow = app_msal.initiate_device_flow(scopes=OUTLOOK_SCOPES)
+        return {
+            "status": "ok",
+            "message": _outlook_flow.get("message", ""),
+            "user_code": _outlook_flow.get("user_code", ""),
+            "verification_url": _outlook_flow.get("verification_uri", "https://microsoft.com/devicelogin")
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/calendar/auth/outlook/token")
+async def outlook_token():
+    global _outlook_flow, _outlook_token
+    try:
+        app_msal = msal.PublicClientApplication(
+            OUTLOOK_CLIENT_ID,
+            authority=f"https://login.microsoftonline.com/common"
+        )
+        result = app_msal.acquire_token_by_device_flow(_outlook_flow)
+        if "access_token" in result:
+            _outlook_token = result["access_token"]
+            import json, os
+            os.makedirs("/app/data", exist_ok=True)
+            with open("/app/data/outlook_token.json", "w") as f:
+                json.dump(result, f)
+            return {"status": "ok", "message": "Outlook Calendar baglandi!"}
+        return {"error": result.get("error_description", "Token alinamadi")}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/calendar/events/outlook")
+async def get_outlook_events(days: int = 7):
+    global _outlook_token
+    try:
+        import requests as req, json
+        from datetime import datetime, timedelta
+        if not _outlook_token:
+            if os.path.exists("/app/data/outlook_token.json"):
+                with open("/app/data/outlook_token.json") as f:
+                    data = json.load(f)
+                _outlook_token = data.get("access_token")
+        if not _outlook_token:
+            return {"error": "Outlook bagli degil"}
+        headers = {"Authorization": f"Bearer {_outlook_token}"}
+        now = datetime.utcnow().isoformat() + "Z"
+        end = (datetime.utcnow() + timedelta(days=days)).isoformat() + "Z"
+        url = f"https://graph.microsoft.com/v1.0/me/calendarview?startDateTime={now}&endDateTime={end}&$top=20&$orderby=start/dateTime"
+        res = req.get(url, headers=headers)
+        events = res.json().get("value", [])
+        if not events:
+            return {"formatted": "Outlook takviminde yaklasan etkinlik yok.", "events": []}
+        lines = ["Outlook takvimi:"]
+        for e in events:
+            title = e.get("subject", "Basliksiz")
+            start = e.get("start", {}).get("dateTime", "")
+            try:
+                dt = datetime.fromisoformat(start)
+                start = dt.strftime("%d %B %Y %H:%M")
+            except Exception:
+                pass
+            lines.append("- " + start + " : " + title)
+        return {"formatted": chr(10).join(lines), "events": events}
     except Exception as e:
         return {"error": str(e)}

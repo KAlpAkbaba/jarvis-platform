@@ -70,20 +70,57 @@ class Assistant:
                 end_dt = (datetime.utcnow() + timedelta(days=7)).isoformat() + "Z"
                 events = service.events().list(calendarId="primary", timeMin=now, timeMax=end_dt, maxResults=10, singleEvents=True, orderBy="startTime").execute().get("items", [])
                 if not events:
-                    return "Takvimde yaklasan etkinlik yok."
-                lines = ["Yaklasan etkinlikleriniz:"]
-                for ev in events:
-                    ev_title = ev.get("summary", "Basliksiz")
-                    ev_start = ev.get("start", {}).get("dateTime", ev.get("start", {}).get("date", ""))
-                    try:
-                        ev_dt = datetime.fromisoformat(ev_start.replace("Z", "+00:00"))
-                        ev_start = ev_dt.strftime("%d %B %Y %H:%M")
-                    except Exception:
-                        pass
-                    lines.append("- " + ev_start + " : " + ev_title)
-                return chr(10).join(lines)
+                    google_result = "Google takviminde yaklasan etkinlik yok."
+                else:
+                    lines = ["Google takvimi:"]
+                    for ev in events:
+                        ev_title = ev.get("summary", "Basliksiz")
+                        ev_start = ev.get("start", {}).get("dateTime", ev.get("start", {}).get("date", ""))
+                        try:
+                            ev_dt = datetime.fromisoformat(ev_start.replace("Z", "+00:00"))
+                            ev_start = ev_dt.strftime("%d %B %Y %H:%M")
+                        except Exception:
+                            pass
+                        lines.append("- " + ev_start + " : " + ev_title)
+                    google_result = chr(10).join(lines)
             except Exception as cal_err2:
-                return "Takvim hatasi: " + str(cal_err2)
+                google_result = "Google takvim hatasi: " + str(cal_err2)
+
+            # Outlook takvimi de goster
+            outlook_result = ""
+            try:
+                import json as _json, os as _os
+                import requests as _req
+                from datetime import datetime as _dt2, timedelta as _td2
+                if _os.path.exists("/app/data/outlook_token.json"):
+                    with open("/app/data/outlook_token.json") as _f:
+                        _tok = _json.load(_f).get("access_token", "")
+                    if _tok:
+                        _headers = {"Authorization": "Bearer " + _tok}
+                        _now = _dt2.utcnow().isoformat() + "Z"
+                        _end = (_dt2.utcnow() + _td2(days=7)).isoformat() + "Z"
+                        _url = "https://graph.microsoft.com/v1.0/me/calendarview?startDateTime=" + _now + "&endDateTime=" + _end + "&$top=10&$orderby=start/dateTime"
+                        _res = _req.get(_url, headers=_headers)
+                        _events = _res.json().get("value", [])
+                        if _events:
+                            _lines = ["Outlook takvimi:"]
+                            for _e in _events:
+                                _title = _e.get("subject", "Basliksiz")
+                                _start = _e.get("start", {}).get("dateTime", "")
+                                try:
+                                    _edt = _dt2.fromisoformat(_start)
+                                    _start = _edt.strftime("%d %B %Y %H:%M")
+                                except Exception:
+                                    pass
+                                _lines.append("- " + _start + " : " + _title)
+                            outlook_result = chr(10).join(_lines)
+            except Exception:
+                pass
+
+            final = google_result
+            if outlook_result:
+                final = final + chr(10) + chr(10) + outlook_result
+            return final
 
 
         # Aktif rezervasyon diyalogu
