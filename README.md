@@ -49,7 +49,7 @@ Jarvis Platform provides a complete local AI assistant stack:
 
 ## 🧠 Architecture
 
-![Architecture](docs/jarvis_platform_v3.svg)
+![Architecture](docs/jarvis_platform_v5.svg)
 
 ### 🧠 How it Works
 
