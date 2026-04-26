@@ -137,8 +137,31 @@ Onceki konusmayi dikkate alarak TURKCE olarak 3-5 cumleyle detayli cevap ver."""
             if raw and raw != "Bilgi bulunamadi.":
                 return self.llm.summarize(text, raw)
 
+        # Matematik kontrolu
+        import re as _re
+        mat_keywords = ['carpi','carpı','bolu','bolü','arti','artı','eksi','hesapla','yuzde','yüzde','kac eder','kactir','kaçtır']
+        mat_symbols = _re.search(r'\d+\s*[\+\-\*\/\^\%xX×÷]\s*\d+', text)
+        has_number = bool(_re.search(r'\d', text_lower))
+        has_math_word = any(k in text_lower for k in mat_keywords)
+        # Not/hatirlatici icin matematik kontrolunu atla
+        is_note = any(k in text_lower for k in ['not al','hatirlatici','kaydet','yaz '])
+        if not is_note and ((has_number and has_math_word) or mat_symbols):
+            mat_prompt = f'Bu matematik sorusunu hesapla ve SADECE sonucu yaz, aciklama yapma: {text}'
+            try:
+                from clients.ollama_client import OllamaClient
+                client = OllamaClient()
+                result_mat = client.chat(
+                    [{"role":"system","content":"Sadece matematik hesapla, yalnizca sayisal sonucu yaz. Hic aciklama yapma."},{"role":"user","content":mat_prompt}],
+                    num_predict=20, temperature=0.1
+                )
+                return result_mat
+            except:
+                return self.llm.summarize(text, "")
+
         # LLM ile isle
         result = self.llm.process(text, self.context.to_list())
+        if result.get("not_icerik") and result.get("kategori") not in ["NOT_AL","HATIRLATICI"]:
+            result["kategori"] = "NOT_AL"
         category = result["category"] if "category" in result else result.get("kategori", "SOHBET")
         answer = result.get("yanit", "Anliyorum.")
 
@@ -169,7 +192,12 @@ Onceki konusmayi dikkate alarak TURKCE olarak 3-5 cumleyle detayli cevap ver."""
             return self.notes.add(icerik, category="genel")
 
         elif category == "HATIRLATICI":
-            content = result.get("not_i�erik") or text
+            import re as _re6
+            content = result.get("not_icerik")
+            if not content:
+                content = __import__("re").sub(r"^(hatirlatici ekle|hatirlatici|alarm)\s*", "", text, flags=__import__("re").IGNORECASE).strip()
+            if not content:
+                content = text
             remind_str = result.get("hatirlatma_zamani")
             remind_at = None
             if remind_str:
