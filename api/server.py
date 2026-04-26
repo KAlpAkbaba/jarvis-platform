@@ -50,8 +50,11 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             payload = json.loads(data)
             text = payload.get("text", "")
+            session_id = payload.get("session_id", "default")
             if not text:
                 continue
+            # Kullanici mesajini kaydet
+            _history.save_message(session_id, "user", text)
             try:
                 # Takvim kontrolu - WebSocket icin
                 from core.router import normalize
@@ -60,6 +63,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 takvim_ekle_ws = ["takvime ekle", "etkinlik ekle", "randevu ekle"]
                 if any(k in text_norm_ws for k in takvim_ekle_ws) or any(k in text_norm_ws for k in takvim_goster_ws):
                     cal_response = assistant.process(text)
+                    _history.save_message(session_id, "assistant", cal_response)
                     await websocket.send_text(json.dumps({"type": "response", "text": cal_response}))
                     continue
                 result = assistant.llm.process(text, assistant.context.to_list())
@@ -104,6 +108,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                         pass
                     await websocket.send_text(json.dumps({"type": "stream_end", "text": full_text}))
                     assistant.update_history(text, full_text)
+                    _history.save_message(session_id, "assistant", full_text)
                 else:
                     response = assistant.process(text)
                     assistant.update_history(text, response)
@@ -424,3 +429,24 @@ async def get_outlook_events(days: int = 7):
         return {"formatted": chr(10).join(lines), "events": events}
     except Exception as e:
         return {"error": str(e)}
+
+# Sohbet gecmisi endpoints
+from services.history_service import HistoryService
+_history = HistoryService()
+
+@app.get("/history/sessions")
+async def get_sessions():
+    return {"sessions": _history.get_all_sessions()}
+
+@app.get("/history/session/{session_id}")
+async def get_session(session_id: str):
+    return {"messages": _history.get_session(session_id)}
+
+@app.delete("/history/session/{session_id}")
+async def delete_session(session_id: str):
+    success = _history.delete_session(session_id)
+    return {"status": "ok" if success else "error"}
+
+@app.get("/history/search")
+async def search_history(q: str):
+    return {"results": _history.search_history(q)}
