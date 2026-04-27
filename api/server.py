@@ -450,3 +450,39 @@ async def delete_session(session_id: str):
 @app.get("/history/search")
 async def search_history(q: str):
     return {"results": _history.search_history(q)}
+
+# Auth endpoints
+from services.auth_service import AuthService
+_auth = AuthService()
+
+@app.post("/auth/register")
+async def register(request: dict):
+    email = request.get("email", "")
+    isim = request.get("isim", "")
+    password = request.get("password", "")
+    if not email or not password:
+        return {"error": "Email ve sifre zorunlu"}
+    return _auth.register(email, isim, password)
+
+@app.post("/auth/login")
+async def login(request: dict):
+    email = request.get("email", "")
+    password = request.get("password", "")
+    return _auth.login(email, password)
+
+@app.post("/auth/logout")
+async def logout(request: dict):
+    token = request.get("token", "")
+    _auth.logout(token)
+    return {"status": "ok"}
+
+@app.get("/auth/me")
+async def get_me(token: str):
+    return _auth.verify_token(token)
+
+@app.get("/users/{user_id}/sessions")
+async def get_user_sessions(user_id: int, token: str):
+    user = _auth.verify_token(token)
+    if "error" in user or user["user_id"] != user_id:
+        return {"error": "Yetkisiz"}
+    return {"sessions": _history.get_all_sessions(user_id)}
