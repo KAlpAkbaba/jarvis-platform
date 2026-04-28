@@ -42,6 +42,34 @@ class Assistant:
     def process(self, text: str) -> str:
         text_lower = text.lower().strip()
 
+        # Hava durumu kontrolu
+        hava_keywords = ['hava', 'sicaklik', 'yagis', 'soguk', 'sicak', 'derece', 'hava durumu']
+        if any(k in text_lower for k in hava_keywords):
+            try:
+                import requests as _req, re as _re
+                # Sehir adini bul
+                sehir = 'Istanbul'
+                sehir_match = _re.search(r"(istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|mersin|diyarbakir|kayseri|eskisehir|trabzon|samsun|denizli|adapazari|malatya|erzurum)", text_lower)
+                if sehir_match:
+                    sehir = sehir_match.group(1).capitalize()
+                
+                api_key = "***REMOVED***"
+                url = f"http://api.openweathermap.org/data/2.5/weather?q={sehir},TR&appid={api_key}&units=metric&lang=tr"
+                res = _req.get(url, timeout=5)
+                data = res.json()
+                
+                if data.get('cod') == 200:
+                    temp = round(data['main']['temp'])
+                    feels = round(data['main']['feels_like'])
+                    humidity = data['main']['humidity']
+                    desc = data['weather'][0]['description']
+                    wind = round(data['wind']['speed'] * 3.6)
+                    return f"{sehir} hava durumu: {temp}°C, {desc}. Hissedilen {feels}°C, nem %{humidity}, ruzgar {wind} km/s."
+                else:
+                    return f"{sehir} icin hava durumu bilgisi alinamadi."
+            except Exception as e:
+                return f"Hava durumu servisi hatasi: {e}"
+
         # Takvim kontrolu
         takvim_goster = ["takvim", "etkinlik", "randevu", "ajanda"]
         takvim_ekle_kw = ["takvime ekle", "etkinlik ekle", "randevu ekle"]
