@@ -47,28 +47,38 @@ class Assistant:
         if any(k in text_lower for k in hava_keywords):
             try:
                 import requests as _req, re as _re
-                # Sehir adini bul
-                sehir = 'Istanbul'
-                sehir_match = _re.search(r"(istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|mersin|diyarbakir|kayseri|eskisehir|trabzon|samsun|denizli|adapazari|malatya|erzurum)", text_lower)
+                sehirler = ['istanbul','ankara','izmir','bursa','antalya','adana','konya','gaziantep','mersin','diyarbakir','kayseri','eskisehir','trabzon','samsun','denizli','adapazari','malatya','erzurum','sivas','van','batman','elazig','urfa','sanliurfa','mardin','hatay','antakya','bodrum','alanya','marmaris','fethiye','konya','kocaeli','izmit','gebze','pendik','kadikoy','besiktas','sisli','umraniye','maltepe','kartal','atasehir']
+                sehir_match = _re.search(r'(' + '|'.join(sehirler) + r')', text_lower)
                 if sehir_match:
                     sehir = sehir_match.group(1).capitalize()
-                
-                api_key = "***REMOVED***"
-                url = f"http://api.openweathermap.org/data/2.5/weather?q={sehir},TR&appid={api_key}&units=metric&lang=tr"
-                res = _req.get(url, timeout=5)
-                data = res.json()
-                
-                if data.get('cod') == 200:
-                    temp = round(data['main']['temp'])
-                    feels = round(data['main']['feels_like'])
-                    humidity = data['main']['humidity']
-                    desc = data['weather'][0]['description']
-                    wind = round(data['wind']['speed'] * 3.6)
-                    return f"{sehir} hava durumu: {temp}°C, {desc}. Hissedilen {feels}°C, nem %{humidity}, ruzgar {wind} km/s."
+                    api_key = "***REMOVED***"
+                    url = f"http://api.openweathermap.org/data/2.5/weather?q={sehir},TR&appid={api_key}&units=metric&lang=tr"
+                    res = _req.get(url, timeout=5)
+                    data = res.json()
+                    if data.get('cod') == 200:
+                        temp = round(data['main']['temp'])
+                        feels = round(data['main']['feels_like'])
+                        humidity = data['main']['humidity']
+                        desc = data['weather'][0]['description']
+                        wind = round(data['wind']['speed'] * 3.6)
+                        return f"{sehir} hava durumu: {temp}C, {desc}. Hissedilen {feels}C, nem %{humidity}, ruzgar {wind} km/s."
+                    else:
+                        return f"{sehir} icin hava durumu bilgisi alinamadi."
                 else:
-                    return f"{sehir} icin hava durumu bilgisi alinamadi."
+                    return "KONUM_GEREKLI"
             except Exception as e:
                 return f"Hava durumu servisi hatasi: {e}"
+
+        # Tarih ve saat kontrolu
+        tarih_keywords = ['bugun', 'saat kac', 'kac', 'tarih', 'gun', 'ay', 'yil', 'haftanin', 'ayın kaci', 'ayin kaci', 'bugunun tarihi', 'simdi saat']
+        if any(k in text_lower for k in tarih_keywords) and not any(k in text_lower for k in ['hava', 'toplanti', 'randevu', 'not', 'hatirlatici']):
+            from datetime import datetime
+            import pytz
+            tz = pytz.timezone('Europe/Istanbul')
+            now = datetime.now(tz)
+            gun_tr = ['Pazartesi','Sali','Carsamba','Persembe','Cuma','Cumartesi','Pazar']
+            ay_tr = ['Ocak','Subat','Mart','Nisan','Mayis','Haziran','Temmuz','Agustos','Eylul','Ekim','Kasim','Aralik']
+            return f"Bugun {gun_tr[now.weekday()]}, {now.day} {ay_tr[now.month-1]} {now.year}. Saat {now.strftime('%H:%M')}."
 
         # Takvim kontrolu
         takvim_goster = ["takvim", "etkinlik", "randevu", "ajanda"]
