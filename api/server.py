@@ -54,7 +54,8 @@ async def websocket_endpoint(websocket: WebSocket):
             if not text:
                 continue
             # Kullanici mesajini kaydet
-            _history.save_message(session_id, "user", text)
+            user_id = payload.get("user_id")
+            _history.save_message(session_id, "user", text, user_id)
             try:
                 # Takvim kontrolu - WebSocket icin
                 from core.router import normalize
@@ -63,7 +64,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 takvim_ekle_ws = ["takvime ekle", "etkinlik ekle", "randevu ekle"]
                 if any(k in text_norm_ws for k in takvim_ekle_ws) or any(k in text_norm_ws for k in takvim_goster_ws):
                     cal_response = assistant.process(text)
-                    _history.save_message(session_id, "assistant", cal_response)
+                    _history.save_message(session_id, "assistant", cal_response, user_id)
                     await websocket.send_text(json.dumps({"type": "response", "text": cal_response}))
                     continue
                 result = assistant.llm.process(text, assistant.context.to_list())
@@ -108,7 +109,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                         pass
                     await websocket.send_text(json.dumps({"type": "stream_end", "text": full_text}))
                     assistant.update_history(text, full_text)
-                    _history.save_message(session_id, "assistant", full_text)
+                    _history.save_message(session_id, "assistant", full_text, user_id)
                 else:
                     response = assistant.process(text)
                     assistant.update_history(text, response)
@@ -435,8 +436,8 @@ from services.history_service import HistoryService
 _history = HistoryService()
 
 @app.get("/history/sessions")
-async def get_sessions():
-    return {"sessions": _history.get_all_sessions()}
+async def get_sessions(user_id: int = None):
+    return {"sessions": _history.get_all_sessions(user_id)}
 
 @app.get("/history/session/{session_id}")
 async def get_session(session_id: str):
@@ -451,7 +452,6 @@ async def delete_session(session_id: str):
 async def search_history(q: str):
     return {"results": _history.search_history(q)}
 
-# Auth endpoints
 from services.auth_service import AuthService
 _auth = AuthService()
 
@@ -480,9 +480,108 @@ async def logout(request: dict):
 async def get_me(token: str):
     return _auth.verify_token(token)
 
-@app.get("/users/{user_id}/sessions")
-async def get_user_sessions(user_id: int, token: str):
-    user = _auth.verify_token(token)
-    if "error" in user or user["user_id"] != user_id:
+import asyncio
+
+async def refresh_outlook_token():
+    while True:
+        try:
+            import requests, json, os
+            token_path = '/app/data/outlook_token.json'
+            if os.path.exists(token_path):
+                with open(token_path) as f:
+                    data = json.load(f)
+                rt = data.get('refresh_token', '')
+                if rt:
+                    res = requests.post('https://login.microsoftonline.com/common/oauth2/v2.0/token', data={
+                        'client_id': '9b1ecc4d-c0cc-4123-8ec1-522c8f278ecf',
+                        'refresh_token': rt,
+                        'grant_type': 'refresh_token',
+                        'scope': 'Calendars.ReadWrite User.Read offline_access',
+                    })
+                    result = res.json()
+                    if 'access_token' in result:
+                        with open(token_path, 'w') as f:
+                            json.dump(result, f)
+                        print('Outlook token otomatik yenilendi!')
+        except Exception as e:
+            print(f'Token refresh hatasi: {e}')
+        await asyncio.sleep(3300)  # Her 55 dakikada bir
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(refresh_outlook_token())
+
+ADMIN_TOKEN = "***REMOVED***"
+
+def verify_admin(token: str):
+    return token == ADMIN_TOKEN
+
+@app.get("/admin/stats")
+async def admin_stats(token: str):
+    if not verify_admin(token):
         return {"error": "Yetkisiz"}
-    return {"sessions": _history.get_all_sessions(user_id)}
+    try:
+        from database.db import SessionLocal
+        from sqlalchemy import text
+        db = SessionLocal()
+        users = db.execute(text("SELECT COUNT(*) FROM kullanicilar")).fetchone()[0]
+        sessions = db.execute(text("SELECT COUNT(DISTINCT session_id) FROM sohbet_gecmisi")).fetchone()[0]
+        messages = db.execute(text("SELECT COUNT(*) FROM sohbet_gecmisi")).fetchone()[0]
+        notes = db.execute(text("SELECT COUNT(*) FROM notlar")).fetchone()[0]
+        recent_users = db.execute(text(
+            "SELECT id, isim, email, created_at, last_login FROM kullanicilar ORDER BY created_at DESC LIMIT 20"
+        )).fetchall()
+        recent_sessions = db.execute(text(
+            "SELECT session_id, MIN(created_at) as started, COUNT(*) as msg_count, LEFT(MAX(CASE WHEN role='user' THEN content END), 60) as preview FROM sohbet_gecmisi GROUP BY session_id ORDER BY started DESC LIMIT 20"
+        )).fetchall()
+        db.close()
+        return {
+            "stats": {"users": users, "sessions": sessions, "messages": messages, "notes": notes},
+            "users": [{"id": r[0], "isim": r[1], "email": r[2], "created_at": str(r[3]), "last_login": str(r[4])} for r in recent_users],
+            "sessions": [{"session_id": r[0], "started": str(r[1]), "msg_count": r[2], "preview": r[3]} for r in recent_sessions],
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/admin/system")
+async def admin_system(token: str):
+    if not verify_admin(token):
+        return {"error": "Yetkisiz"}
+    try:
+        import psutil, subprocess
+        cpu = psutil.cpu_percent(interval=1)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        ollama_ok = False
+        try:
+            import requests as req
+            r = req.get('http://172.17.0.1:11434/api/tags', timeout=2)
+            ollama_ok = r.status_code == 200
+        except: pass
+        return {
+            "cpu": cpu,
+            "memory": {"total": mem.total, "used": mem.used, "percent": mem.percent},
+            "disk": {"total": disk.total, "used": disk.used, "percent": disk.percent},
+            "services": {
+                "api": True,
+                "ollama": ollama_ok,
+                "postgres": True,
+            }
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.delete("/admin/user/{user_id}")
+async def admin_delete_user(user_id: int, token: str):
+    if not verify_admin(token):
+        return {"error": "Yetkisiz"}
+    try:
+        from database.db import SessionLocal
+        from sqlalchemy import text
+        db = SessionLocal()
+        db.execute(text("DELETE FROM kullanicilar WHERE id = :id"), {"id": user_id})
+        db.commit()
+        db.close()
+        return {"status": "ok"}
+    except Exception as e:
+        return {"error": str(e)}

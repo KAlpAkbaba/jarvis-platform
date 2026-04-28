@@ -7,12 +7,12 @@ class HistoryService:
     def create_session(self) -> str:
         return str(uuid.uuid4())[:8]
 
-    def save_message(self, session_id: str, role: str, content: str):
+    def save_message(self, session_id: str, role: str, content: str, user_id: int = None):
         try:
             db = SessionLocal()
             db.execute(text(
-                "INSERT INTO sohbet_gecmisi (session_id, role, content) VALUES (:s, :r, :c)"
-            ), {"s": session_id, "r": role, "c": content})
+                "INSERT INTO sohbet_gecmisi (session_id, role, content, kullanici_id) VALUES (:s, :r, :c, :u)"
+            ), {"s": session_id, "r": role, "c": content, "u": user_id})
             db.commit()
             db.close()
         except Exception as e:
@@ -30,17 +30,28 @@ class HistoryService:
             print(f"History getir hatasi: {e}")
             return []
 
-    def get_all_sessions(self):
+    def get_all_sessions(self, user_id: int = None):
         try:
             db = SessionLocal()
-            result = db.execute(text("""
-                SELECT session_id, MIN(created_at) as started, COUNT(*) as msg_count,
-                       LEFT(MAX(CASE WHEN role='user' THEN content END), 50) as preview
-                FROM sohbet_gecmisi
-                GROUP BY session_id
-                ORDER BY started DESC
-                LIMIT 20
-            """)).fetchall()
+            if user_id:
+                result = db.execute(text("""
+                    SELECT session_id, MIN(created_at) as started, COUNT(*) as msg_count,
+                           LEFT(MAX(CASE WHEN role='user' THEN content END), 50) as preview
+                    FROM sohbet_gecmisi
+                    WHERE kullanici_id = :uid
+                    GROUP BY session_id
+                    ORDER BY started DESC
+                    LIMIT 20
+                """), {"uid": user_id}).fetchall()
+            else:
+                result = db.execute(text("""
+                    SELECT session_id, MIN(created_at) as started, COUNT(*) as msg_count,
+                           LEFT(MAX(CASE WHEN role='user' THEN content END), 50) as preview
+                    FROM sohbet_gecmisi
+                    GROUP BY session_id
+                    ORDER BY started DESC
+                    LIMIT 20
+                """)).fetchall()
             db.close()
             return [{"session_id": r[0], "started": str(r[1]), "msg_count": r[2], "preview": r[3]} for r in result]
         except Exception as e:
