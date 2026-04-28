@@ -65,7 +65,67 @@ async def websocket_endpoint(websocket: WebSocket):
                 hava_ws = ["hava", "sicaklik", "yagis", "derece"]
                 tarih_ws = ["bugun", "saat kac", "tarih", "ayın kaci", "ayin kaci"]
                 if any(k in text_norm_ws for k in takvim_ekle_ws) or any(k in text_norm_ws for k in takvim_goster_ws) or any(k in text_norm_ws for k in hava_ws) or any(k in text_norm_ws for k in tarih_ws):
-                    cal_response = assistant.process(text)
+                    if any(k in text_norm_ws for k in takvim_goster_ws) and user_id:
+                        # Kullanici bazli takvim
+                        from database.db import SessionLocal as _SL
+                        from sqlalchemy import text as _text
+                        from datetime import datetime as _dt, timedelta as _td
+                        _db = _SL()
+                        _rows = _db.execute(_text("SELECT provider, access_token, refresh_token FROM kullanici_takvim_tokenlar WHERE kullanici_id = :u AND provider IN ('google','microsoft')"), {"u": user_id}).fetchall()
+                        _db.close()
+                        if _rows:
+                            import requests as _req2
+                            _lines = []
+                            for _row in _rows:
+                                _prov, _at, _rt = _row
+                                if _prov == 'google':
+                                    try:
+                                        from google.oauth2.credentials import Credentials
+                                        from googleapiclient.discovery import build
+                                        import json as _js
+                                        with open(GOOGLE_WEB_CREDS) as _f:
+                                            _cfg = _js.load(_f)['web']
+                                        _creds = Credentials(token=_at, refresh_token=_rt, token_uri='https://oauth2.googleapis.com/token', client_id=_cfg['client_id'], client_secret=_cfg['client_secret'])
+                                        _svc = build('calendar', 'v3', credentials=_creds)
+                                        _now = _dt.utcnow().isoformat() + 'Z'
+                                        _end = (_dt.utcnow() + _td(days=7)).isoformat() + 'Z'
+                                        _evts = _svc.events().list(calendarId='primary', timeMin=_now, timeMax=_end, maxResults=10, singleEvents=True, orderBy='startTime').execute().get('items', [])
+                                        if _evts:
+                                            _lines.append('Google takvimi:')
+                                            for _e in _evts:
+                                                _t = _e.get('summary','Basliksiz')
+                                                _s = _e.get('start',{}).get('dateTime',_e.get('start',{}).get('date',''))
+                                                try:
+                                                    _edt = _dt.fromisoformat(_s.replace('Z','+00:00'))
+                                                    _s = _edt.strftime('%d %B %Y %H:%M')
+                                                except: pass
+                                                _lines.append(f'- {_s} : {_t}')
+                                    except Exception as _ge:
+                                        _lines.append(f'Google takvim hatasi: {_ge}')
+                                elif _prov == 'microsoft':
+                                    try:
+                                        _hdrs = {'Authorization': 'Bearer ' + _at}
+                                        _now2 = _dt.utcnow().isoformat() + 'Z'
+                                        _end2 = (_dt.utcnow() + _td(days=7)).isoformat() + 'Z'
+                                        _r2 = _req2.get(f'https://graph.microsoft.com/v1.0/me/calendarview?startDateTime={_now2}&endDateTime={_end2}&$top=10&$orderby=start/dateTime', headers=_hdrs)
+                                        _me = _r2.json().get('value', [])
+                                        if _me:
+                                            _lines.append('Outlook takvimi:')
+                                            for _e in _me:
+                                                _t = _e.get('subject','Basliksiz')
+                                                _s = _e.get('start',{}).get('dateTime','')
+                                                try:
+                                                    _edt = _dt.fromisoformat(_s)
+                                                    _s = _edt.strftime('%d %B %Y %H:%M')
+                                                except: pass
+                                                _lines.append(f'- {_s} : {_t}')
+                                    except Exception as _me2:
+                                        _lines.append(f'Outlook takvim hatasi: {_me2}')
+                            cal_response = chr(10).join(_lines) if _lines else 'Takvimde yaklasan etkinlik yok.'
+                        else:
+                            cal_response = 'Takvim bagli degil. Ayarlardan Google veya Microsoft takviminizi baglayin.'
+                    else:
+                        cal_response = assistant.process(text)
                     _history.save_message(session_id, "assistant", cal_response, user_id)
                     await websocket.send_text(json.dumps({"type": "response", "text": cal_response}))
                     continue
@@ -585,5 +645,200 @@ async def admin_delete_user(user_id: int, token: str):
         db.commit()
         db.close()
         return {"status": "ok"}
+    except Exception as e:
+        return {"error": str(e)}
+
+import json as _json
+
+GOOGLE_WEB_CREDS = '/app/data/google_web_credentials.json'
+MICROSOFT_CLIENT_ID = '9b1ecc4d-c0cc-4123-8ec1-522c8f278ecf'
+MICROSOFT_CLIENT_SECRET = '***REMOVED***'
+REDIRECT_BASE = 'https://aktivra.com/api'
+
+@app.get("/auth/google/url")
+async def google_auth_url(user_id: int):
+    try:
+        import base64, hashlib, secrets
+        from urllib.parse import urlencode
+        with open(GOOGLE_WEB_CREDS) as f:
+            cfg = _json.load(f)['web']
+        verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b'=').decode()
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
+        from database.db import SessionLocal
+        from sqlalchemy import text
+        db = SessionLocal()
+        db.execute(text("INSERT INTO kullanici_takvim_tokenlar (kullanici_id, provider, access_token, refresh_token) VALUES (:u, :p, :a, :r) ON CONFLICT (kullanici_id, provider) DO UPDATE SET refresh_token = :r"), {"u": user_id, "p": "google_verifier", "a": "", "r": verifier})
+        db.commit()
+        db.close()
+        params = {
+            'response_type': 'code',
+            'client_id': cfg['client_id'],
+            'redirect_uri': REDIRECT_BASE + '/auth/google/callback',
+            'scope': 'https://www.googleapis.com/auth/calendar',
+            'access_type': 'offline',
+            'prompt': 'consent',
+            'state': str(user_id),
+            'code_challenge': challenge,
+            'code_challenge_method': 'S256',
+        }
+        url = 'https://accounts.google.com/o/oauth2/auth?' + urlencode(params)
+        return {"url": url}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/auth/google/callback")
+async def google_callback(code: str, state: str):
+    try:
+        import requests as _req
+        from database.db import SessionLocal
+        from sqlalchemy import text
+        from datetime import datetime, timedelta
+        user_id = int(state)
+        with open(GOOGLE_WEB_CREDS) as f:
+            cfg = _json.load(f)['web']
+        db = SessionLocal()
+        row = db.execute(text("SELECT refresh_token FROM kullanici_takvim_tokenlar WHERE kullanici_id = :u AND provider = 'google_verifier'"), {"u": user_id}).fetchone()
+        verifier = row[0] if row else None
+        token_data = {
+            'code': code,
+            'client_id': cfg['client_id'],
+            'client_secret': cfg['client_secret'],
+            'redirect_uri': REDIRECT_BASE + '/auth/google/callback',
+            'grant_type': 'authorization_code',
+        }
+        if verifier:
+            token_data['code_verifier'] = verifier
+        res = _req.post('https://oauth2.googleapis.com/token', data=token_data)
+        tokens = res.json()
+        print(f"Google tokens keys: {list(tokens.keys())}")
+        if 'access_token' not in tokens:
+            return {"error": tokens.get('error_description', 'Token alinamadi')}
+        expires_at = datetime.now() + timedelta(seconds=tokens.get('expires_in', 3600))
+        try:
+            db.execute(text("INSERT INTO kullanici_takvim_tokenlar (kullanici_id, provider, access_token, refresh_token, expires_at) VALUES (:u, :p, :a, :r, :e) ON CONFLICT (kullanici_id, provider) DO UPDATE SET access_token = :a, refresh_token = :r, expires_at = :e"), {"u": user_id, "p": "google", "a": tokens['access_token'], "r": tokens.get('refresh_token', ''), "e": expires_at})
+            db.commit()
+            print(f"Google token DB kayit OK! user_id={user_id}")
+        except Exception as db_err:
+            print(f"Google token DB HATA: {db_err}")
+        finally:
+            db.close()
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="https://aktivra.com/?calendar=connected", status_code=302)
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/auth/microsoft/url")
+async def microsoft_auth_url(user_id: int):
+    try:
+        from urllib.parse import urlencode
+        params = {
+            'client_id': MICROSOFT_CLIENT_ID,
+            'response_type': 'code',
+            'redirect_uri': REDIRECT_BASE + '/auth/microsoft/callback',
+            'scope': 'Calendars.ReadWrite User.Read offline_access',
+            'state': str(user_id),
+            'response_mode': 'query',
+        }
+        url = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?' + urlencode(params)
+        return {"url": url}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/auth/microsoft/callback")
+async def microsoft_callback(code: str, state: str):
+    try:
+        import requests as _req
+        from database.db import SessionLocal
+        from sqlalchemy import text
+        from datetime import datetime, timedelta
+        user_id = int(state)
+        res = _req.post('https://login.microsoftonline.com/common/oauth2/v2.0/token', data={
+            'client_id': MICROSOFT_CLIENT_ID,
+            'client_secret': MICROSOFT_CLIENT_SECRET,
+            'code': code,
+            'redirect_uri': REDIRECT_BASE + '/auth/microsoft/callback',
+            'grant_type': 'authorization_code',
+        })
+        tokens = res.json()
+        if 'access_token' not in tokens:
+            return {"error": tokens.get('error_description', 'Token alinamadi')}
+        expires_at = datetime.now() + timedelta(seconds=tokens.get('expires_in', 3600))
+        db = SessionLocal()
+        db.execute(text("INSERT INTO kullanici_takvim_tokenlar (kullanici_id, provider, access_token, refresh_token, expires_at) VALUES (:u, :p, :a, :r, :e) ON CONFLICT (kullanici_id, provider) DO UPDATE SET access_token = :a, refresh_token = :r, expires_at = :e"), {"u": user_id, "p": "microsoft", "a": tokens['access_token'], "r": tokens.get('refresh_token', ''), "e": expires_at})
+        db.commit()
+        db.close()
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="https://aktivra.com/?calendar=connected")
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/calendar/user/{user_id}/events")
+async def get_user_calendar_events(user_id: int, token: str, days: int = 7):
+    try:
+        user = _auth.verify_token(token)
+        if "error" in user or user["user_id"] != user_id:
+            return {"error": "Yetkisiz"}
+        import requests as _req
+        from database.db import SessionLocal
+        from sqlalchemy import text
+        from datetime import datetime, timedelta
+        db = SessionLocal()
+        rows = db.execute(text("SELECT provider, access_token, refresh_token, expires_at FROM kullanici_takvim_tokenlar WHERE kullanici_id = :u AND provider IN ('google', 'microsoft')"), {"u": user_id}).fetchall()
+        db.close()
+        events = []
+        for row in rows:
+            provider, access_token, refresh_token, expires_at = row
+            if provider == 'google':
+                from googleapiclient.discovery import build
+                from google.oauth2.credentials import Credentials
+                with open(GOOGLE_WEB_CREDS) as f:
+                    cfg = _json.load(f)['web']
+                creds = Credentials(token=access_token, refresh_token=refresh_token, token_uri='https://oauth2.googleapis.com/token', client_id=cfg['client_id'], client_secret=cfg['client_secret'])
+                service = build('calendar', 'v3', credentials=creds)
+                now = datetime.utcnow().isoformat() + 'Z'
+                end = (datetime.utcnow() + timedelta(days=days)).isoformat() + 'Z'
+                result = service.events().list(calendarId='primary', timeMin=now, timeMax=end, maxResults=10, singleEvents=True, orderBy='startTime').execute()
+                for e in result.get('items', []):
+                    events.append({"provider": "Google", "title": e.get('summary', 'Basliksiz'), "start": e.get('start', {}).get('dateTime', e.get('start', {}).get('date', ''))})
+            elif provider == 'microsoft':
+                headers = {'Authorization': 'Bearer ' + access_token}
+                now = datetime.utcnow().isoformat() + 'Z'
+                end = (datetime.utcnow() + timedelta(days=days)).isoformat() + 'Z'
+                res = _req.get(f'https://graph.microsoft.com/v1.0/me/calendarview?startDateTime={now}&endDateTime={end}&$top=10&$orderby=start/dateTime', headers=headers)
+                for e in res.json().get('value', []):
+                    events.append({"provider": "Microsoft", "title": e.get('subject', 'Basliksiz'), "start": e.get('start', {}).get('dateTime', '')})
+        return {"events": events, "count": len(events)}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.delete("/calendar/disconnect/{provider}")
+async def disconnect_calendar(provider: str, user_id: int, token: str):
+    try:
+        user = _auth.verify_token(token)
+        if "error" in user or user["user_id"] != user_id:
+            return {"error": "Yetkisiz"}
+        from database.db import SessionLocal
+        from sqlalchemy import text
+        db = SessionLocal()
+        db.execute(text("DELETE FROM kullanici_takvim_tokenlar WHERE kullanici_id = :u AND provider = :p"), {"u": user_id, "p": provider})
+        db.commit()
+        db.close()
+        return {"status": "ok", "message": provider + " takvim baglantisi kesildi!"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/calendar/status/{user_id}")
+async def calendar_status(user_id: int, token: str):
+    try:
+        user = _auth.verify_token(token)
+        if "error" in user or user["user_id"] != user_id:
+            return {"error": "Yetkisiz"}
+        from database.db import SessionLocal
+        from sqlalchemy import text
+        db = SessionLocal()
+        rows = db.execute(text("SELECT provider FROM kullanici_takvim_tokenlar WHERE kullanici_id = :u AND provider IN ('google', 'microsoft')"), {"u": user_id}).fetchall()
+        db.close()
+        providers = [r[0] for r in rows]
+        return {"google": "google" in providers, "microsoft": "microsoft" in providers}
     except Exception as e:
         return {"error": str(e)}
