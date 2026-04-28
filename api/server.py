@@ -5,6 +5,7 @@ import json
 import httpx
 import tempfile
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -526,12 +527,54 @@ async def register(request: dict):
         return {"error": "Email ve sifre zorunlu"}
     return _auth.register(email, isim, password)
 
+@app.post("/auth/verify-email")
+async def verify_email(request: dict):
+    token = request.get("token", "")
+    if not token:
+        return {"error": "Token zorunlu"}
+    return _auth.verify_email(token)
+@app.post("/auth/resend-verification")
+async def resend_verification(request: dict):
+    email = request.get("email", "")
+    if not email:
+        return {"error": "Email zorunlu"}
+    return _auth.resend_verification(email)
+@app.get("/auth/verify-email")
+async def verify_email_get(token: str):
+    result = _auth.verify_email(token)
+    if "error" in result:
+        return RedirectResponse(url="https://aktivra.com/verify-error")
+    return RedirectResponse(url="https://aktivra.com/verify-success")
 @app.post("/auth/login")
 async def login(request: dict):
     email = request.get("email", "")
     password = request.get("password", "")
     return _auth.login(email, password)
 
+@app.post("/auth/change-password")
+async def change_password(request: dict):
+    token = request.get("token", "")
+    current_password = request.get("current_password", "")
+    new_password = request.get("new_password", "")
+    if not token or not current_password or not new_password:
+        return {"error": "Tum alanlar zorunlu"}
+    if len(new_password) < 6:
+        return {"error": "Sifre en az 6 karakter olmali"}
+    user = _auth.verify_token(token)
+    if "error" in user:
+        return {"error": "Gecersiz token"}
+    from database.db import SessionLocal
+    from sqlalchemy import text
+    db = SessionLocal()
+    row = db.execute(text("SELECT sifre_hash FROM kullanicilar WHERE id = :id"), {"id": user["user_id"]}).fetchone()
+    if not row or not _auth.verify_password(current_password, row[0] or ""):
+        db.close()
+        return {"error": "Mevcut sifre yanlis"}
+    new_hash = _auth.hash_password(new_password)
+    db.execute(text("UPDATE kullanicilar SET sifre_hash = :h WHERE id = :id"), {"h": new_hash, "id": user["user_id"]})
+    db.commit()
+    db.close()
+    return {"success": True}
 @app.post("/auth/logout")
 async def logout(request: dict):
     token = request.get("token", "")
