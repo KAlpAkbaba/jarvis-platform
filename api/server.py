@@ -62,7 +62,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 text_norm_ws = normalize(text.lower())
                 takvim_goster_ws = ["takvim", "etkinlik", "randevu", "ajanda"]
                 takvim_ekle_ws = ["takvime ekle", "etkinlik ekle", "randevu ekle"]
-                if any(k in text_norm_ws for k in takvim_ekle_ws) or any(k in text_norm_ws for k in takvim_goster_ws):
+                hava_ws = ["hava", "sicaklik", "yagis", "derece"]
+                tarih_ws = ["bugun", "saat kac", "tarih", "ayın kaci", "ayin kaci"]
+                if any(k in text_norm_ws for k in takvim_ekle_ws) or any(k in text_norm_ws for k in takvim_goster_ws) or any(k in text_norm_ws for k in hava_ws) or any(k in text_norm_ws for k in tarih_ws):
                     cal_response = assistant.process(text)
                     _history.save_message(session_id, "assistant", cal_response, user_id)
                     await websocket.send_text(json.dumps({"type": "response", "text": cal_response}))
