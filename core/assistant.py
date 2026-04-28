@@ -101,8 +101,13 @@ class Assistant:
                 return f"Hava durumu servisi hatasi: {e}"
 
         # Tarih ve saat kontrolu
-        tarih_keywords = ['bugun', 'saat kac', 'kac', 'tarih', 'gun', 'ay', 'yil', 'haftanin', 'ayın kaci', 'ayin kaci', 'bugunun tarihi', 'simdi saat']
-        if any(k in text_lower for k in tarih_keywords) and not any(k in text_lower for k in ['hava', 'toplanti', 'randevu', 'not', 'hatirlatici']):
+        tarih_keywords = ['bugun', 'saat kac', 'kac', 'tarih', 'gun', 'ay', 'yil', 'haftanin', 'ayın kaci', 'ayin kaci', 'bugunun tarihi', 'simdi saat', 'gunlerden', 'gün', 'günlerden']
+        import unicodedata as _ucd
+        def _tnorm(s):
+            tr_map = str.maketrans('çğıöşüÇĞİÖŞÜ','cgiosucgiosu')
+            return s.lower().translate(tr_map)
+        text_lower_norm = _tnorm(text)
+        if any(k in text_lower_norm for k in tarih_keywords) and not any(k in text_lower_norm for k in ['hava', 'toplanti', 'randevu', 'not', 'hatirlatici']):
             from datetime import datetime
             import pytz
             tz = pytz.timezone('Europe/Istanbul')
