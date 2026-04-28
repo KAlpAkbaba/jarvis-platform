@@ -47,10 +47,41 @@ class Assistant:
         if any(k in text_lower for k in hava_keywords):
             try:
                 import requests as _req, re as _re
-                sehirler = ['istanbul','ankara','izmir','bursa','antalya','adana','konya','gaziantep','mersin','diyarbakir','kayseri','eskisehir','trabzon','samsun','denizli','adapazari','malatya','erzurum','sivas','van','batman','elazig','urfa','sanliurfa','mardin','hatay','antakya','bodrum','alanya','marmaris','fethiye','konya','kocaeli','izmit','gebze','pendik','kadikoy','besiktas','sisli','umraniye','maltepe','kartal','atasehir']
-                sehir_match = _re.search(r'(' + '|'.join(sehirler) + r')', text_lower)
-                if sehir_match:
-                    sehir = sehir_match.group(1).capitalize()
+                # Tum Turkiye illeri + ilceler + dunya sehirleri
+                import unicodedata as _ud
+                def _norm(s):
+                    s = s.lower()
+                    tr_map = str.maketrans('çğıöşüÇĞİÖŞÜ','cgiosucgiosu')
+                    return s.translate(tr_map)
+                
+                sehirler_raw = ['istanbul','ankara','izmir','bursa','antalya','adana','konya','gaziantep','mersin','diyarbakir','kayseri','eskisehir','trabzon','samsun','denizli','sakarya','adapazari','malatya','erzurum','sivas','van','batman','elazig','urfa','sanliurfa','mardin','hatay','antakya','bodrum','alanya','marmaris','fethiye','kocaeli','izmit','gebze','pendik','kadikoy','besiktas','sisli','umraniye','maltepe','kartal','atasehir','edirne','tekirdag','kirklareli','canakkale','balikesir','manisa','aydin','mugla','burdur','isparta','afyon','kutahya','usak','bilecik','yalova','bolu','duzce','zonguldak','karabuk','bartin','kastamonu','sinop','corum','amasya','tokat','giresun','rize','artvin','ardahan','igdir','agri','mus','bitlis','siirt','sirnak','hakkari','erzincan','bayburt','gumushane','ordu','samsun','tunceli','bingol','elazig','adiyaman','kahramanmaras','osmaniye','kilis','aksaray','nevsehir','kirsehir','yozgat','cankiri','ankara','konya','karaman','nigde','nigde','karabuk','london','paris','berlin','rome','madrid','amsterdam','brussels','vienna','zurich','dubai','tokyo','seoul','beijing','shanghai','moscow','new york','los angeles','chicago','sydney','toronto','montreal']
+                
+                text_norm_city = _norm(text_lower)
+                sehir = None
+                for s in sehirler_raw:
+                    s_norm = _norm(s)
+                    if s_norm in text_norm_city:
+                        sehir = s.capitalize()
+                        break
+                
+                # Fuzzy match - yazim hatasi toleransi
+                if not sehir:
+                    try:
+                        from difflib import get_close_matches
+                        words = text_norm_city.split()
+                        sehirler_norm = [_norm(s) for s in sehirler_raw]
+                        for word in words:
+                            if len(word) > 3:
+                                matches = get_close_matches(word, sehirler_norm, n=1, cutoff=0.75)
+                                if matches:
+                                    idx_s = sehirler_norm.index(matches[0])
+                                    sehir = sehirler_raw[idx_s].capitalize()
+                                    break
+                    except:
+                        pass
+                
+                if sehir:
+                    pass
                     api_key = "***REMOVED***"
                     url = f"http://api.openweathermap.org/data/2.5/weather?q={sehir},TR&appid={api_key}&units=metric&lang=tr"
                     res = _req.get(url, timeout=5)
