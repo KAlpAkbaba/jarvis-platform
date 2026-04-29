@@ -24,6 +24,79 @@ class AuthService:
     def create_token(self) -> str:
         return secrets.token_urlsafe(32)
 
+
+    def request_password_change(self, email: str, isim: str, user_id: int, new_password: str) -> dict:
+        """Şifre değiştirme isteği — onay maili gönder."""
+        try:
+            import secrets, json
+            from database.db import SessionLocal
+            from sqlalchemy import text
+            # Token oluştur (yeni şifreyi de içeriyor)
+            token = secrets.token_urlsafe(32)
+            payload = json.dumps({"user_id": user_id, "new_password": new_password})
+            db = SessionLocal()
+            db.execute(text(
+                "INSERT INTO email_verify_tokens (token, user_id, token_type, extra_data) VALUES (:t, :u, 'pw_change', :e) ON CONFLICT DO NOTHING"
+            ), {"t": token, "u": user_id, "e": payload})
+            db.commit()
+            db.close()
+            confirm_url = f"https://aktivra.com/api/auth/confirm-password-change?token={token}"
+            resend.Emails.send({
+                "from": "Jarvis AI <noreply@aktivra.com>",
+                "to": email,
+                "subject": "Şifre Değiştirme Onayı — Jarvis AI",
+                "html": f"""
+                <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#0a0a0a;color:#f0f0f0;border-radius:16px;overflow:hidden">
+                  <div style="background:#111;padding:32px;text-align:center;border-bottom:1px solid #222">
+                    <div style="width:48px;height:48px;background:#fff;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#0a0a0a;margin-bottom:12px">J</div>
+                    <h1 style="margin:0;font-size:20px;font-weight:700">JARVIS AI</h1>
+                  </div>
+                  <div style="padding:36px 32px">
+                    <h2 style="margin:0 0 12px;font-size:18px">Şifre Değiştirme İsteği</h2>
+                    <p style="color:#888;font-size:14px;line-height:1.7;margin:0 0 24px">
+                      Merhaba {isim},<br>
+                      Hesabınız için şifre değiştirme isteği aldık.<br>
+                      Onaylamak için aşağıdaki butona tıklayın.
+                    </p>
+                    <a href="{confirm_url}" style="display:inline-block;padding:14px 28px;background:#fff;color:#0a0a0a;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px">
+                      Şifre Değişikliğini Onayla →
+                    </a>
+                    <p style="color:#555;font-size:12px;margin-top:24px">Bu işlemi siz yapmadıysanız bu maili görmezden gelin. Link 1 saat geçerlidir.</p>
+                  </div>
+                </div>
+                """
+            })
+            return {"success": True, "message": "Onay maili gönderildi. Lütfen e-postanızı kontrol edin."}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def confirm_password_change(self, token: str) -> dict:
+        """Şifre değiştirme onayı — token ile şifreyi güncelle."""
+        try:
+            import json
+            from database.db import SessionLocal
+            from sqlalchemy import text
+            db = SessionLocal()
+            row = db.execute(text(
+                "SELECT user_id, extra_data, created_at FROM email_verify_tokens WHERE token = :t AND token_type = 'pw_change'"
+            ), {"t": token}).fetchone()
+            if not row:
+                db.close()
+                return {"error": "Gecersiz veya kullanilmis token"}
+            from datetime import datetime, timedelta
+            if datetime.now() - row[2] > timedelta(hours=1):
+                db.close()
+                return {"error": "Token suresi dolmus"}
+            payload = json.loads(row[1])
+            new_hash = self.hash_password(payload["new_password"])
+            db.execute(text("UPDATE kullanicilar SET sifre_hash = :h WHERE id = :u"), {"h": new_hash, "u": row[0]})
+            db.execute(text("DELETE FROM email_verify_tokens WHERE token = :t"), {"t": token})
+            db.commit()
+            db.close()
+            return {"success": True}
+        except Exception as e:
+            return {"error": str(e)}
+
     def send_welcome_email(self, email: str, isim: str):
         try:
             resend.Emails.send({
@@ -203,7 +276,9 @@ class AuthService:
                 token = self._create_session(db, user[0])
                 db.close()
                 self.send_welcome_email(email, isim)
-                return {"token": token, "user_id": user[0], "isim": user[1], "email": email, "avatar_url": avatar_url}
+                google_id_val = provider_id if provider == "google" else None
+                ms_id_val = provider_id if provider == "microsoft" else None
+                return {"token": token, "user_id": user[0], "isim": user[1], "email": email, "avatar_url": avatar_url, "google_id": google_id_val, "microsoft_id": ms_id_val}
             else:
                 db.execute(text(
                     f"UPDATE kullanicilar SET {col} = :p, last_login = NOW(), email_verified = TRUE WHERE id = :id"
@@ -218,16 +293,13 @@ class AuthService:
     def verify_token(self, token: str) -> dict:
         try:
             db = SessionLocal()
-            result = db.execute(text("""
-                SELECT k.id, k.isim, k.email, k.avatar_url
-                FROM kullanici_sessiyonlari s
-                JOIN kullanicilar k ON s.kullanici_id = k.id
-                WHERE s.token = :t AND s.expires_at > NOW()
-            """), {"t": token}).fetchone()
+            result = db.execute(text(
+                "SELECT k.id, k.isim, k.email, k.avatar_url, k.google_id, k.microsoft_id FROM kullanici_sessiyonlari s JOIN kullanicilar k ON s.kullanici_id = k.id WHERE s.token = :t AND s.expires_at > NOW()"
+            ), {"t": token}).fetchone()
             db.close()
             if not result:
                 return {"error": "Gecersiz token"}
-            return {"user_id": result[0], "isim": result[1], "email": result[2], "avatar_url": result[3]}
+            return {"user_id": result[0], "isim": result[1], "email": result[2], "avatar_url": result[3], "google_id": result[4], "microsoft_id": result[5]}
         except Exception as e:
             return {"error": str(e)}
 

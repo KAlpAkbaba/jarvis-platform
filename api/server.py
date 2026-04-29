@@ -981,8 +981,8 @@ async def change_password(request: dict):
     token = request.get("token", "")
     current_password = request.get("current_password", "")
     new_password = request.get("new_password", "")
-    if not token or not current_password or not new_password:
-        return {"error": "Tum alanlar zorunlu"}
+    if not token or not new_password:
+        return {"error": "Token ve yeni sifre zorunlu"}
     if len(new_password) < 6:
         return {"error": "Sifre en az 6 karakter olmali"}
     user = _auth.verify_token(token)
@@ -991,15 +991,22 @@ async def change_password(request: dict):
     from database.db import SessionLocal
     from sqlalchemy import text
     db = SessionLocal()
-    row = db.execute(text("SELECT sifre_hash FROM kullanicilar WHERE id = :id"), {"id": user["user_id"]}).fetchone()
-    if not row or not _auth.verify_password(current_password, row[0] or ""):
+    row = db.execute(text("SELECT email, isim FROM kullanicilar WHERE id = :id"), {"id": user["user_id"]}).fetchone()
+    if not row:
         db.close()
-        return {"error": "Mevcut sifre yanlis"}
-    new_hash = _auth.hash_password(new_password)
-    db.execute(text("UPDATE kullanicilar SET sifre_hash = :h WHERE id = :id"), {"h": new_hash, "id": user["user_id"]})
-    db.commit()
+        return {"error": "Kullanici bulunamadi"}
+    email, isim = row
     db.close()
-    return {"success": True}
+    result = _auth.request_password_change(email, isim, user["user_id"], new_password)
+    return result
+
+@app.get("/auth/confirm-password-change")
+async def confirm_password_change(token: str):
+    result = _auth.confirm_password_change(token)
+    if result.get("success"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="https://aktivra.com/?pw_changed=1")
+    return RedirectResponse(url="https://aktivra.com/?pw_error=1")
 @app.post("/auth/logout")
 async def logout(request: dict):
     token = request.get("token", "")
@@ -1533,6 +1540,24 @@ async def mark_read(notif_id: int):
         db.commit()
         db.close()
         return {"status": "ok"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/auth/profile")
+async def get_profile(token: str):
+    try:
+        from database.db import SessionLocal as _SL
+        from sqlalchemy import text as _t
+        user = _auth.verify_token(token)
+        if "error" in user:
+            return {"error": "Gecersiz token"}
+        db = _SL()
+        row = db.execute(_t("SELECT sifre_hash, google_id, microsoft_id FROM kullanicilar WHERE id = :u"), {"u": user["user_id"]}).fetchone()
+        db.close()
+        has_password = bool(row and row[0] and len(row[0]) > 10)
+        is_oauth = bool(row and (row[1] or row[2]))
+        return {**user, "has_password": has_password, "is_oauth": is_oauth}
     except Exception as e:
         return {"error": str(e)}
 
