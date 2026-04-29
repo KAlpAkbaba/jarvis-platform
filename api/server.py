@@ -247,6 +247,52 @@ async def websocket_endpoint(websocket: WebSocket):
                 if k in _text_lower:
                     _kimlik_yanit = v
                     break
+            # Pending takvim etkinliği kontrolü
+            _provider_keywords = {"google": "google", "gmail": "google", "outlook": "microsoft", "microsoft": "microsoft"}
+            _text_lower_full = text.lower().strip()
+            if user_id and any(k in _text_lower_full for k in ["google", "outlook", "microsoft", "her ikisi", "ikisi", "her iki"]):
+                try:
+                    from database.db import SessionLocal as _SL7
+                    from sqlalchemy import text as _t7
+                    import json as _js7
+                    _db7 = _SL7()
+                    _prow = _db7.execute(_t7("SELECT content FROM sohbet_gecmisi WHERE session_id = :s AND role = 'pending_event' ORDER BY created_at DESC LIMIT 1"), {"s": session_id}).fetchone()
+                    if _prow:
+                        _ev_pending = _js7.loads(_prow[0])
+                        _ev_pending['user_id'] = user_id
+                        # pending_event'i sil
+                        _db7.execute(_t7("DELETE FROM sohbet_gecmisi WHERE session_id = :s AND role = 'pending_event'"), {"s": session_id})
+                        _db7.commit()
+                        _db7.close()
+                        # Hangi provider?
+                        _target_providers = []
+                        if "her ikisi" in _text_lower_full or "ikisi" in _text_lower_full:
+                            _target_providers = ["google", "microsoft"]
+                        elif "google" in _text_lower_full or "gmail" in _text_lower_full:
+                            _target_providers = ["google"]
+                        elif "outlook" in _text_lower_full or "microsoft" in _text_lower_full:
+                            _target_providers = ["microsoft"]
+                        if _target_providers:
+                            _results = []
+                            async with httpx.AsyncClient(timeout=15) as _pc7:
+                                for _prov7 in _target_providers:
+                                    _ev_pending['provider'] = _prov7
+                                    _r7 = await _pc7.post("http://172.17.0.1:8000/calendar/add/user", json=_ev_pending)
+                                    _d7 = _r7.json()
+                                    _plabel = "Google" if _prov7 == "google" else "Outlook"
+                                    if _d7.get('status') == 'ok':
+                                        _results.append(f"✓ {_plabel}")
+                                    else:
+                                        _results.append(f"✗ {_plabel}: {_d7.get('error','hata')}")
+                            cal_response = f"**{_ev_pending.get('title')}** eklendi: {', '.join(_results)} — {_ev_pending.get('start','')[:16].replace('T',' ')}"
+                            _history.save_message(session_id, "assistant", cal_response, user_id)
+                            await websocket.send_text(json.dumps({"type": "response", "text": cal_response}))
+                            continue
+                    else:
+                        _db7.close()
+                except Exception as _pe7:
+                    print(f"Pending event error: {_pe7}")
+
             # Kısa devam mesajları veya kişisel tercih — web aramasi yapma
             # Bilgi sorusu mu, devam mesajı mı?
             _bilgi_starter = ["nedir", "kimdir", "nasil", "neden", "ne zaman", "nerede", "anlat", "acikla", "hakkinda bilgi"]
@@ -305,11 +351,75 @@ Nesnel bilgi verme, kisisel yorum yap. Kisa tut, cevabin sonunda konusmayi devam
                 from core.router import normalize
                 text_norm_ws = normalize(text.lower())
                 takvim_goster_ws = ["takvim", "etkinlik", "randevu", "ajanda"]
-                takvim_ekle_ws = ["takvime ekle", "etkinlik ekle", "randevu ekle"]
+                takvim_ekle_ws = ["takvime ekle", "etkinlik ekle", "randevu ekle", "toplanti ekle", "hatirlatici ekle", "ekle takvime", "takvime yaz", "toplantisi ekle", "toplanti ayarla", "randevu ayarla", "saat ekle", "toplanti kur"]
                 hava_ws = ["hava", "sicaklik", "yagis", "derece"]
                 tarih_ws = ["bugun", "saat kac", "tarih", "ayın kaci", "ayin kaci"]
-                if any(k in text_norm_ws for k in takvim_ekle_ws) or any(k in text_norm_ws for k in takvim_goster_ws) or any(k in text_norm_ws for k in hava_ws) or any(k in text_norm_ws for k in tarih_ws):
-                    if any(k in text_norm_ws for k in takvim_goster_ws) and user_id:
+                # Takvim ekleme: "ekle" + (tarih/saat/yarin/bugun) kombinasyonu da yakala
+                _has_ekle = "ekle" in text_norm_ws
+                _has_time = any(k in text_norm_ws for k in ["saat", "yarin", "bugun", "pazartesi", "sali", "carsamba", "persembe", "cuma", "cumartesi", "pazar", "hafta", "tarih"])
+                _is_takvim_ekle = any(k in text_norm_ws for k in takvim_ekle_ws) or (_has_ekle and _has_time)
+                if _is_takvim_ekle or any(k in text_norm_ws for k in takvim_goster_ws) or any(k in text_norm_ws for k in hava_ws) or any(k in text_norm_ws for k in tarih_ws):
+                    if _is_takvim_ekle and user_id:
+                        # LLM ile etkinlik bilgilerini parse et
+                        from datetime import datetime as _dtnow2
+                        _now_str = _dtnow2.now().strftime('%Y-%m-%d %H:%M')
+                        from datetime import datetime as _dtnow3, timedelta as _td3
+                        _bugun = _dtnow3.now().strftime('%Y-%m-%d')
+                        _yarin = (_dtnow3.now() + _td3(days=1)).strftime('%Y-%m-%d')
+                        _parse_prompt = f"""Bugun: {_now_str} ({_bugun})
+Yarin: {_yarin}
+Kullanici mesaji: "{text}"
+Bu mesajdan takvim etkinligi bilgilerini cikart.
+ONEMLI: "yarin" kelimesi geciyorsa tarihi {_yarin} olarak kullan, "bugun" veya tarih yoksa {_bugun} kullan.
+SADECE asagidaki JSON formatinda don, baska hicbir sey yazma:
+{{"title":"etkinlik adi","start":"{_yarin}T14:00:00","end":"{_yarin}T15:00:00"}}
+Sure belirtilmemisse 1 saat ekle. Sadece JSON don."""
+                        try:
+                            async with httpx.AsyncClient(timeout=15) as _pc:
+                                _pr = await _pc.post("http://172.17.0.1:11434/api/chat", json={"model": config.llm_model, "messages": [{"role":"user","content":_parse_prompt}], "stream": False})
+                                import re as _re4
+                                _raw_parse = _pr.json().get("message",{}).get("content","")
+                                _jmatch = _re4.search(r'\{.*\}', _raw_parse, _re4.DOTALL)
+                                if _jmatch:
+                                    _ev_data = json.loads(_jmatch.group())
+                                    _ev_data['user_id'] = user_id
+                                    # Provider kontrolü
+                                    from database.db import SessionLocal as _SL5
+                                    from sqlalchemy import text as _t5
+                                    _db5 = _SL5()
+                                    _providers = [r[0] for r in _db5.execute(_t5("SELECT provider FROM kullanici_takvim_tokenlar WHERE kullanici_id = :u AND provider IN ('google','microsoft')"), {"u": user_id}).fetchall()]
+                                    _db5.close()
+                                    if not _providers:
+                                        cal_response = "Takvim bağlı değil. Ayarlar > Takvim'den Google veya Microsoft takviminizi bağlayın."
+                                    elif len(_providers) == 1:
+                                        # Tek takvim — direkt ekle
+                                        _ev_data['provider'] = _providers[0]
+                                        _add_r = await _pc.post("http://172.17.0.1:8000/calendar/add/user", json=_ev_data)
+                                        _add_d = _add_r.json()
+                                        _prov_label = "Google" if _providers[0] == "google" else "Outlook"
+                                        if _add_d.get('status') == 'ok':
+                                            cal_response = f"✓ {_prov_label} takvimine eklendi: **{_ev_data.get('title')}** — {_ev_data.get('start','')[:16].replace('T',' ')}"
+                                        else:
+                                            cal_response = f"Etkinlik eklenemedi: {_add_d.get('error','Bilinmeyen hata')}"
+                                    else:
+                                        # Birden fazla takvim — kullanıcıya sor, pending olarak sakla
+                                        import json as _js6
+                                        _pending = _js6.dumps(_ev_data)
+                                        from database.db import SessionLocal as _SL6
+                                        from sqlalchemy import text as _t6
+                                        _db6 = _SL6()
+                                        _db6.execute(_t6("INSERT INTO sohbet_gecmisi (session_id, role, content, kullanici_id) VALUES (:s, 'pending_event', :c, :u)"), {"s": session_id, "c": _pending, "u": user_id})
+                                        _db6.commit()
+                                        _db6.close()
+                                        cal_response = f"**{_ev_data.get('title')}** etkinliğini hangi takvime ekleyeyim?\n\n- **Google** takvim\n- **Outlook** takvim\n- **Her ikisi**"
+                                else:
+                                    cal_response = "Etkinlik bilgilerini anlayamadım. Örnek: 'Yarın saat 14:00'e toplantı ekle'"
+                        except Exception as _pe:
+                            cal_response = f"Etkinlik eklenirken hata: {str(_pe)}"
+                        _history.save_message(session_id, "assistant", cal_response, user_id)
+                        await websocket.send_text(json.dumps({"type": "response", "text": cal_response}))
+                        continue
+                    elif any(k in text_norm_ws for k in takvim_goster_ws) and user_id:
                         # Kullanici bazli takvim
                         from database.db import SessionLocal as _SL
                         from sqlalchemy import text as _text
@@ -1276,6 +1386,145 @@ async def calendar_events_today(user_id: int, token: str = ""):
         return {"events": events}
     except Exception as e:
         return {"events": [], "error": str(e)}
+
+@app.post("/calendar/add/user")
+async def add_event_user(request: dict):
+    """Kullanicinin OAuth tokeni ile takvime etkinlik ekler."""
+    try:
+        from datetime import datetime as _dt2
+        user_id    = request.get('user_id')
+        title      = request.get('title', 'Etkinlik')
+        start_str  = request.get('start', '')
+        end_str    = request.get('end', '')
+        description= request.get('description', '')
+        provider   = request.get('provider', 'google')  # google veya microsoft
+        if not user_id or not start_str:
+            return {"error": "user_id ve start zorunlu"}
+        from database.db import SessionLocal as _SL4
+        from sqlalchemy import text as _t4
+        _db4 = _SL4()
+        row = _db4.execute(_t4("SELECT access_token, refresh_token FROM kullanici_takvim_tokenlar WHERE kullanici_id = :u AND provider = :p"), {"u": user_id, "p": provider}).fetchone()
+        _db4.close()
+        if not row:
+            return {"error": f"{provider} takvimi bagli degil"}
+        at, rt = row
+        start_dt = _dt2.fromisoformat(start_str)
+        end_dt   = _dt2.fromisoformat(end_str) if end_str else _dt2.fromisoformat(start_str.replace(start_str[11:16], f"{int(start_str[11:13])+1:02d}{start_str[13:16]}"))
+        if provider == 'google':
+            from google.oauth2.credentials import Credentials
+            from googleapiclient.discovery import build
+            import json as _js5
+            with open(GOOGLE_WEB_CREDS) as f:
+                cfg = _js5.load(f)['web']
+            creds = Credentials(token=at, refresh_token=rt, token_uri='https://oauth2.googleapis.com/token', client_id=cfg['client_id'], client_secret=cfg['client_secret'])
+            svc = build('calendar', 'v3', credentials=creds)
+            event = {'summary': title, 'description': description, 'start': {'dateTime': start_dt.isoformat(), 'timeZone': 'Europe/Istanbul'}, 'end': {'dateTime': end_dt.isoformat(), 'timeZone': 'Europe/Istanbul'}}
+            created = svc.events().insert(calendarId='primary', body=event).execute()
+            return {"status": "ok", "event_id": created.get('id'), "title": title, "start": start_str}
+        elif provider == 'microsoft':
+            import requests as _req5
+            hdrs = {'Authorization': 'Bearer ' + at, 'Content-Type': 'application/json'}
+            body = {"subject": title, "body": {"contentType": "HTML", "content": description}, "start": {"dateTime": start_dt.isoformat(), "timeZone": "Europe/Istanbul"}, "end": {"dateTime": end_dt.isoformat(), "timeZone": "Europe/Istanbul"}}
+            r = _req5.post('https://graph.microsoft.com/v1.0/me/events', headers=hdrs, json=body)
+            if r.status_code in [200, 201]:
+                return {"status": "ok", "title": title, "start": start_str}
+            return {"error": r.text}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/calendar/add/user")
+async def add_event_user(request: dict):
+    """Kullanicinin OAuth tokeni ile takvime etkinlik ekler."""
+    try:
+        from datetime import datetime as _dt2
+        user_id    = request.get('user_id')
+        title      = request.get('title', 'Etkinlik')
+        start_str  = request.get('start', '')
+        end_str    = request.get('end', '')
+        description= request.get('description', '')
+        provider   = request.get('provider', 'google')  # google veya microsoft
+        if not user_id or not start_str:
+            return {"error": "user_id ve start zorunlu"}
+        from database.db import SessionLocal as _SL4
+        from sqlalchemy import text as _t4
+        _db4 = _SL4()
+        row = _db4.execute(_t4("SELECT access_token, refresh_token FROM kullanici_takvim_tokenlar WHERE kullanici_id = :u AND provider = :p"), {"u": user_id, "p": provider}).fetchone()
+        _db4.close()
+        if not row:
+            return {"error": f"{provider} takvimi bagli degil"}
+        at, rt = row
+        start_dt = _dt2.fromisoformat(start_str)
+        end_dt   = _dt2.fromisoformat(end_str) if end_str else _dt2.fromisoformat(start_str.replace(start_str[11:16], f"{int(start_str[11:13])+1:02d}{start_str[13:16]}"))
+        if provider == 'google':
+            from google.oauth2.credentials import Credentials
+            from googleapiclient.discovery import build
+            import json as _js5
+            with open(GOOGLE_WEB_CREDS) as f:
+                cfg = _js5.load(f)['web']
+            creds = Credentials(token=at, refresh_token=rt, token_uri='https://oauth2.googleapis.com/token', client_id=cfg['client_id'], client_secret=cfg['client_secret'])
+            svc = build('calendar', 'v3', credentials=creds)
+            event = {'summary': title, 'description': description, 'start': {'dateTime': start_dt.isoformat(), 'timeZone': 'Europe/Istanbul'}, 'end': {'dateTime': end_dt.isoformat(), 'timeZone': 'Europe/Istanbul'}}
+            created = svc.events().insert(calendarId='primary', body=event).execute()
+            return {"status": "ok", "event_id": created.get('id'), "title": title, "start": start_str}
+        elif provider == 'microsoft':
+            import requests as _req5
+            hdrs = {'Authorization': 'Bearer ' + at, 'Content-Type': 'application/json'}
+            body = {"subject": title, "body": {"contentType": "HTML", "content": description}, "start": {"dateTime": start_dt.isoformat(), "timeZone": "Europe/Istanbul"}, "end": {"dateTime": end_dt.isoformat(), "timeZone": "Europe/Istanbul"}}
+            r = _req5.post('https://graph.microsoft.com/v1.0/me/events', headers=hdrs, json=body)
+            if r.status_code in [200, 201]:
+                return {"status": "ok", "title": title, "start": start_str}
+            return {"error": r.text}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/auth/upload-avatar")
+async def upload_avatar(file: UploadFile = File(...), user_id: int = 0, token: str = ""):
+    try:
+        import os, uuid, base64
+        from database.db import SessionLocal as _SL
+        from sqlalchemy import text as _t
+        # Dosyayı base64 olarak DB'ye kaydet
+        data = await file.read()
+        b64 = base64.b64encode(data).decode()
+        mime = file.content_type or "image/jpeg"
+        avatar_data = f"data:{mime};base64,{b64}"
+        db = _SL()
+        db.execute(_t("UPDATE kullanicilar SET avatar_url = :a WHERE id = :u"), {"a": avatar_data, "u": user_id})
+        db.commit()
+        db.close()
+        return {"status": "ok", "avatar_url": avatar_data}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/notifications/{user_id}")
+async def get_notifications(user_id: int, token: str = ""):
+    try:
+        from database.db import SessionLocal as _SL
+        from sqlalchemy import text as _t
+        db = _SL()
+        rows = db.execute(_t(
+            "SELECT id, type, title, body, is_read, created_at FROM bildirimler WHERE kullanici_id = :u ORDER BY created_at DESC LIMIT 50"
+        ), {"u": user_id}).fetchall()
+        db.close()
+        return {"notifications": [{"id":r[0],"type":r[1],"title":r[2],"body":r[3],"is_read":r[4],"created_at":str(r[5])} for r in rows]}
+    except Exception as e:
+        return {"notifications": [], "error": str(e)}
+
+@app.post("/notifications/read/{notif_id}")
+async def mark_read(notif_id: int):
+    try:
+        from database.db import SessionLocal as _SL
+        from sqlalchemy import text as _t
+        db = _SL()
+        db.execute(_t("UPDATE bildirimler SET is_read = TRUE WHERE id = :i"), {"i": notif_id})
+        db.commit()
+        db.close()
+        return {"status": "ok"}
+    except Exception as e:
+        return {"error": str(e)}
+
 # ── Login OAuth ──────────────────────────────────────────────────────────────
 @app.get("/auth/login/google")
 async def login_google():
