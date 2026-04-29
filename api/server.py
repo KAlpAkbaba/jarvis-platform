@@ -528,6 +528,16 @@ Bugun: {_dtnow.now().strftime('%Y-%m-%d %H:%M')}"""
                     else:
                         prompt = f"Soru: {resolved_text}\nYALNIZCA TURKCE olarak cevapla."
                     full_text = ""
+                    # full_text temizleyici fonksiyon
+                    def _clean_tr(t):
+                        import re as _rec
+                        t = _rec.sub(r'[一-鿿぀-ゟ゠-ヿ가-힯㐀-䶿＀-￯]', '', t)
+                        t = _rec.sub(r'https?://\S+', '', t)
+                        t = _rec.sub(r'\[.*?\]\(.*?\)', '', t)
+                        # Çince cümle kalıntılarını temizle (noktalama + boşluk)
+                        t = _rec.sub(r'[。，、；：？！""''【】《》（）]+', ' ', t)
+                        t = _rec.sub(r'\s{3,}', ' ', t)
+                        return t.strip()
                     await websocket.send_text(json.dumps({"type": "stream_start"}))
                     async with httpx.AsyncClient(timeout=60) as client:
                         async with client.stream("POST", "http://172.17.0.1:11434/api/chat", json={
@@ -549,6 +559,7 @@ Bugun: {_dtnow.now().strftime('%Y-%m-%d %H:%M')}"""
                                             await websocket.send_text(json.dumps({"type": "stream", "text": token}))
                                     except:
                                         pass
+                    full_text = _clean_tr(full_text)
                     # Son 150 karakterde soru yoksa konuya gore soru ekle
                     if full_text and full_text.strip() and "?" not in full_text[-150:]:
                         # Konudan anahtar kelime al
