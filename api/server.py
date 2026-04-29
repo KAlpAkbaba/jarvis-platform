@@ -221,6 +221,9 @@ async def websocket_endpoint(websocket: WebSocket):
             # Kimlik sorulari — dogrudan cevapla, LLM/web aramasina gitme
             _kimlik_map = {
                 "seni kim yaratt": "Ben Jarvis, Aktivra tarafindan gelistirildim. Turkce konusan bir yapay zeka asistaniyim.",
+                "seni kim gelistir": "Beni Aktivra gelistirdi. Turkce konusan bir yapay zeka asistaniyim.",
+                "kim gelistirdi": "Beni Aktivra gelistirdi.",
+                "kim gelistir": "Beni Aktivra gelistirdi.",
                 "kim yaratti": "Beni Aktivra gelistirdi. Turkce konusan bir yapay zeka asistaniyim.",
                 "sen kimsin": "Ben Jarvis! Aktivra tarafindan gelistirilmis bir yapay zeka asistaniyim. Web arama, takvim, not alma ve daha fazlasinda yardimci olabilirim.",
                 "jarvis kimsin": "Ben Jarvis! Aktivra tarafindan gelistirilmis bir yapay zeka asistaniyim.",
@@ -235,7 +238,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 "nasil olusturuldun": "Aktivra ekibi tarafindan gelistirildim.",
                 "nasil yapildin": "Aktivra muhendisleri tarafindan yapay zeka teknolojileriyle olusturuldum.",
             }
-            _text_lower = text.lower().strip()
+            # Turkce karakterleri normalize et
+            def _normalize_tr(s):
+                return s.lower().replace('ş','s').replace('ğ','g').replace('ü','u').replace('ö','o').replace('ı','i').replace('ç','c').replace('Ş','s').replace('Ğ','g').replace('Ü','u').replace('Ö','o').replace('İ','i').replace('Ç','c')
+            _text_lower = _normalize_tr(text.strip())
             _kimlik_yanit = None
             for k, v in _kimlik_map.items():
                 if k in _text_lower:
@@ -243,7 +249,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     break
             if _kimlik_yanit:
                 _history.save_message(session_id, "assistant", _kimlik_yanit, user_id)
-                await websocket.send_text(json.dumps({"type": "response", "text": _kimlik_yanit}))
+                await websocket.send_text(json.dumps({"type": "stream_start"}))
+                # Kelime kelime stream et
+                import asyncio as _asyncio
+                _words = _kimlik_yanit.split(" ")
+                for _word in _words:
+                    await websocket.send_text(json.dumps({"type": "stream", "text": _word + " "}))
+                    await _asyncio.sleep(0.04)
+                await websocket.send_text(json.dumps({"type": "stream_end", "text": _kimlik_yanit}))
                 continue
 
             try:
@@ -355,7 +368,10 @@ Bugun: {_dtnow.now().strftime('%Y-%m-%d %H:%M')}"""
                     for m in session_history[-6:]:
                         ctx_msgs.append({"role": m["role"], "content": m["content"]})
                     import re as _re2
-                    raw = _re2.sub(r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]", "", raw)
+                    # Asya dil karakterlerini ve markdown link formatindaki video linklerini temizle
+                    raw = _re2.sub(r'[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u3400-\u4dbf]', '', raw)
+                    raw = _re2.sub(r'\[.*?\]\(https?://.*?\)', '', raw)  # markdown linkleri kaldir
+                    raw = _re2.sub(r'https?://\S+', '', raw)  # diger linkleri kaldir
                     if raw and len(raw) > 20:
                         prompt = f"Soru: {resolved_text}\nArama sonucu (sadece Turkce kullan): {raw[:500]}\nYALNIZCA TURKCE cevapla. Asla Cince veya yabanci karakter yazma."
                     else:

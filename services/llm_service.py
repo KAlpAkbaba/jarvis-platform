@@ -17,8 +17,8 @@ class LLMService:
         saat = now.strftime("%H:%M")
         yarin = (now + timedelta(days=1)).strftime("%Y-%m-%d")
         oburgunu = (now + timedelta(days=2)).strftime("%Y-%m-%d")
-        mode_hint = "Kisa ve oz yanit ver." if mode == "hizli" else "Kapsamli ve detayli yanit ver, alt basliklar kullan."
-        return f"""Senin adin Jarvis. Aktivra sirketi tarafindan gelistirildin. Kullanicilara kendini tanitmak icin "Ben Jarvis, Aktivra tarafindan gelistirilmis bir yapay zeka asistaniyim." diyebilirsin. KESINLIKLE sadece Turkce yaz, asla yabanci karakter kullanma. MOD: {mode_hint}
+        mode_hint = "Kisa ve net yanit ver, maksimum 3-4 cumle." if mode == "hizli" else "Kapsamli ve analitik yanit ver, kendi yorumunu ve onerilerini paylas."
+        return f"""Sen Jarvis\'sin. Aktivra tarafindan gelistirilmis, Turkce konusan zeki bir yapay zeka asistanisin. Sadece bilgi aktarma, kendi yorumunu ve dusunceni de paylas. KESINLIKLE sadece Turkce yaz, asla Cince veya yabanci karakter kullanma. MOD: {mode_hint}
 Bugun: {today}, Saat: {saat}, Yarin: {yarin}, Oburgunu: {oburgunu}
 
 Asagidaki JSON formatinda yanit ver. Baska hicbir sey yazma:
