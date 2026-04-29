@@ -11,13 +11,14 @@ class LLMService:
     def __init__(self):
         self.client = OllamaClient(model=config.llm_model)
 
-    def _system_prompt(self):
+    def _system_prompt(self, mode: str = "hizli"):
         now = datetime.now()
         today = now.strftime("%Y-%m-%d")
         saat = now.strftime("%H:%M")
         yarin = (now + timedelta(days=1)).strftime("%Y-%m-%d")
         oburgunu = (now + timedelta(days=2)).strftime("%Y-%m-%d")
-        return f"""Sen YALNIZCA TURKCE konusan zeki bir yapay zeka asistansin. KESINLIKLE sadece Turkce yaz, asla Cince, Japonca, Ingilizce veya baska dil karakteri kullanma.
+        mode_hint = "Kisa ve oz yanit ver." if mode == "hizli" else "Kapsamli ve detayli yanit ver, alt basliklar kullan."
+        return f"""Senin adin Jarvis. Aktivra sirketi tarafindan gelistirildin. Kullanicilara kendini tanitmak icin "Ben Jarvis, Aktivra tarafindan gelistirilmis bir yapay zeka asistaniyim." diyebilirsin. KESINLIKLE sadece Turkce yaz, asla yabanci karakter kullanma. MOD: {mode_hint}
 Bugun: {today}, Saat: {saat}, Yarin: {yarin}, Oburgunu: {oburgunu}
 
 Asagidaki JSON formatinda yanit ver. Baska hicbir sey yazma:
@@ -38,9 +39,9 @@ Kullanici: "not al yarin toplantim var" -> not_icerik: "yarin toplantim var"
 
 Sadece JSON dondur, baska hicbir aciklama yapma."""
 
-    def process(self, text, history=None):
+    def process(self, text, history=None, mode: str = "hizli"):
         history = history or []
-        messages = [{"role": "system", "content": self._system_prompt()}]
+        messages = [{"role": "system", "content": self._system_prompt(mode)}]
         messages.extend(history[-6:])
         messages.append({"role": "user", "content": text})
         try:

@@ -57,8 +57,8 @@ async def generate_session_title(session_id: str, first_user_msg: str, first_ass
                 from sqlalchemy import text as _t2
                 _db2 = _SL2()
                 _db2.execute(_t2(
-                    "UPDATE sohbet_gecmisi SET content = :c WHERE session_id = :s AND id = (SELECT MIN(id) FROM sohbet_gecmisi WHERE session_id = :s AND role = 'user')"
-                ), {"c": title, "s": session_id})
+                    "INSERT INTO session_titles (session_id, title) VALUES (:s, :t) ON CONFLICT (session_id) DO UPDATE SET title = :t"
+                ), {"s": session_id, "t": title})
                 _db2.commit()
                 _db2.close()
     except Exception as _e:
@@ -90,22 +90,25 @@ def extract_topic(history: list) -> str:
     return ""
 
 def resolve_context(text: str, history: list) -> str:
-    """Kısa/belirsiz mesajlara önceki konuyu ekler."""
+    """Kisa/belirsiz mesajlara onceki konuyu ekler — sadece aynı konu devam ediyorsa."""
     words = text.strip().split()
-    # 5 kelimeden kısa ve soru işareti içeriyorsa veya
-    # "nerede", "ne zaman", "kim", "nasıl", "neden", "ne kadar" ile başlıyorsa
-    short_question_starters = ["nerede", "ne zaman", "kim", "nasil", "neden", "ne kadar",
-                                "kac", "hangi", "ne ile", "neden", "ne kadar", "kimin",
-                                "neye", "neyle", "nereye", "nereden"]
-    is_short = len(words) <= 6
-    starts_with_question = any(text.lower().startswith(s) for s in short_question_starters)
-    has_pronoun = any(w in text.lower() for w in ["bu", "onu", "onun", "bunun", "bunu", "orada", "burasi", "orasi"])
 
-    if (is_short and starts_with_question) or has_pronoun:
-        topic = extract_topic(history[:-1] if history else [])  # son user msg hariç
+    # Yeni bir nesne/konu adı varsa context ekleme
+    # 3+ kelimeli sorular genellikle kendi başına tamamdır
+    if len(words) >= 3:
+        return text
+
+    short_question_starters = ["nerede", "ne zaman", "nasil", "neden", "ne kadar",
+                                "kac", "neye", "neyle", "nereye", "nereden",
+                                "kim tarafindan", "hangi ulkede", "kac yilinda"]
+    has_pronoun = any(w in text.lower() for w in ["onu", "onun", "bunun", "bunu", "orada", "orasi"])
+    starts_with_question = any(text.lower().startswith(s) for s in short_question_starters)
+
+    # Sadece zamir veya çok kısa soru starter varsa context ekle
+    if has_pronoun or (len(words) <= 2 and starts_with_question):
+        topic = extract_topic(history[:-1] if history else [])
         if topic and topic.lower() not in text.lower():
-            # Ana nesneyi bul - son uzun user mesajından ilk birkaç kelime
-            topic_words = topic.split()[:4]
+            topic_words = topic.split()[:3]
             topic_short = " ".join(topic_words)
             return f"{topic_short} - {text}"
     return text
@@ -128,8 +131,8 @@ async def generate_session_title(session_id: str, first_user_msg: str, first_ass
                 from sqlalchemy import text as _t2
                 _db2 = _SL2()
                 _db2.execute(_t2(
-                    "UPDATE sohbet_gecmisi SET content = :c WHERE session_id = :s AND id = (SELECT MIN(id) FROM sohbet_gecmisi WHERE session_id = :s AND role = 'user')"
-                ), {"c": title, "s": session_id})
+                    "INSERT INTO session_titles (session_id, title) VALUES (:s, :t) ON CONFLICT (session_id) DO UPDATE SET title = :t"
+                ), {"s": session_id, "t": title})
                 _db2.commit()
                 _db2.close()
     except Exception as _e:
@@ -161,22 +164,25 @@ def extract_topic(history: list) -> str:
     return ""
 
 def resolve_context(text: str, history: list) -> str:
-    """Kısa/belirsiz mesajlara önceki konuyu ekler."""
+    """Kisa/belirsiz mesajlara onceki konuyu ekler — sadece aynı konu devam ediyorsa."""
     words = text.strip().split()
-    # 5 kelimeden kısa ve soru işareti içeriyorsa veya
-    # "nerede", "ne zaman", "kim", "nasıl", "neden", "ne kadar" ile başlıyorsa
-    short_question_starters = ["nerede", "ne zaman", "kim", "nasil", "neden", "ne kadar",
-                                "kac", "hangi", "ne ile", "neden", "ne kadar", "kimin",
-                                "neye", "neyle", "nereye", "nereden"]
-    is_short = len(words) <= 6
-    starts_with_question = any(text.lower().startswith(s) for s in short_question_starters)
-    has_pronoun = any(w in text.lower() for w in ["bu", "onu", "onun", "bunun", "bunu", "orada", "burasi", "orasi"])
 
-    if (is_short and starts_with_question) or has_pronoun:
-        topic = extract_topic(history[:-1] if history else [])  # son user msg hariç
+    # Yeni bir nesne/konu adı varsa context ekleme
+    # 3+ kelimeli sorular genellikle kendi başına tamamdır
+    if len(words) >= 3:
+        return text
+
+    short_question_starters = ["nerede", "ne zaman", "nasil", "neden", "ne kadar",
+                                "kac", "neye", "neyle", "nereye", "nereden",
+                                "kim tarafindan", "hangi ulkede", "kac yilinda"]
+    has_pronoun = any(w in text.lower() for w in ["onu", "onun", "bunun", "bunu", "orada", "orasi"])
+    starts_with_question = any(text.lower().startswith(s) for s in short_question_starters)
+
+    # Sadece zamir veya çok kısa soru starter varsa context ekle
+    if has_pronoun or (len(words) <= 2 and starts_with_question):
+        topic = extract_topic(history[:-1] if history else [])
         if topic and topic.lower() not in text.lower():
-            # Ana nesneyi bul - son uzun user mesajından ilk birkaç kelime
-            topic_words = topic.split()[:4]
+            topic_words = topic.split()[:3]
             topic_short = " ".join(topic_words)
             return f"{topic_short} - {text}"
     return text
@@ -194,6 +200,7 @@ async def websocket_endpoint(websocket: WebSocket):
             payload = json.loads(data)
             text = payload.get("text", "")
             session_id = payload.get("session_id", "default")
+            chat_mode  = payload.get("mode", "hizli")  # "hizli" veya "arastirma"
             if not text:
                 continue
             # Kullanici mesajini kaydet
@@ -201,10 +208,44 @@ async def websocket_endpoint(websocket: WebSocket):
             # Session geçmişini yükle
             session_history = load_session_history(session_id)
             # Konu takibi — kısa/belirsiz sorulara önceki konuyu ekle
-            resolved_text = resolve_context(text, session_history)
+            # Kimlik sorularinda context resolution yapma
+            _kimlik_check = ["sen kimsin", "kim yaratti", "amacin ne", "ne yapabilirsin", "kim gelistirdi"]
+            if any(k in text.lower() for k in _kimlik_check):
+                resolved_text = text
+            else:
+                resolved_text = resolve_context(text, session_history)
             _history.save_message(session_id, "user", text, user_id)
             # İlk mesaj mı? Başlık üretimi için bayrak
             is_first_msg = len([m for m in session_history if m["role"] == "user"]) == 0
+
+            # Kimlik sorulari — dogrudan cevapla, LLM/web aramasina gitme
+            _kimlik_map = {
+                "seni kim yaratt": "Ben Jarvis, Aktivra tarafindan gelistirildim. Turkce konusan bir yapay zeka asistaniyim.",
+                "kim yaratti": "Beni Aktivra gelistirdi. Turkce konusan bir yapay zeka asistaniyim.",
+                "sen kimsin": "Ben Jarvis! Aktivra tarafindan gelistirilmis bir yapay zeka asistaniyim. Web arama, takvim, not alma ve daha fazlasinda yardimci olabilirim.",
+                "jarvis kimsin": "Ben Jarvis! Aktivra tarafindan gelistirilmis bir yapay zeka asistaniyim.",
+                "amacin ne": "Amacim size Turkce olarak yardimci olmak — sorularinizi yanitlamak, takviminizi yonetmek ve gunluk islerinizi kolaylastirmak.",
+                "ne yapabilirsin": "Web arama, hava durumu, takvim yonetimi, not alma ve hatirlatici kurabilir, genel sohbet yapabilirim!",
+                "kim gelistirdi": "Beni Aktivra gelistirdi.",
+                "kim olusturdu": "Beni Aktivra olusturdu.",
+                "kim yapti": "Beni Aktivra yapti.",
+                "gelistiren": "Beni Aktivra gelistirdi.",
+                "kim tarafindan": "Aktivra tarafindan gelistirildim.",
+                "tarafindan gelistir": "Aktivra tarafindan gelistirildim.",
+                "nasil olusturuldun": "Aktivra ekibi tarafindan gelistirildim.",
+                "nasil yapildin": "Aktivra muhendisleri tarafindan yapay zeka teknolojileriyle olusturuldum.",
+            }
+            _text_lower = text.lower().strip()
+            _kimlik_yanit = None
+            for k, v in _kimlik_map.items():
+                if k in _text_lower:
+                    _kimlik_yanit = v
+                    break
+            if _kimlik_yanit:
+                _history.save_message(session_id, "assistant", _kimlik_yanit, user_id)
+                await websocket.send_text(json.dumps({"type": "response", "text": _kimlik_yanit}))
+                continue
+
             try:
                 # Takvim kontrolu - WebSocket icin
                 from core.router import normalize
@@ -280,7 +321,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
                 # DB geçmişini LLM'e ilet + resolved text kullan
                 db_history = [{"role": m["role"], "content": m["content"]} for m in session_history[-8:]]
-                result = assistant.llm.process(resolved_text, db_history)
+                # Kimlik sorularini direkt SOHBET olarak isle, web aramasi yapma
+                _kimlik_sorulari = ["sen kimsin", "kim yaratti", "amacin ne", "ne yapabilirsin", "nasil calisiyorsun", "kim gelistirdi", "jarvis kimdir", "sen neydin", "seni yaratan"]
+                from core.router import normalize as _norm
+                _rt_norm = _norm(resolved_text.lower())
+                if any(k in _rt_norm for k in _kimlik_sorulari):
+                    result = {"kategori": "SOHBET", "yanit": None, "not_icerik": None, "hatirlatma_zamani": None, "medya_sorgu": None, "rezervasyon_detay": None}
+                else:
+                    result = assistant.llm.process(resolved_text, db_history, mode=chat_mode)
                 category = result.get("kategori", "SOHBET")
                 text_norm = normalize(text)
                 bilgi = ["nedir","kimdir","nasil","anlat","kim","neden","hava","haber","sicaklik","acikla"]
@@ -294,7 +342,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         raw = assistant.search.search(text)
                     else:
                         raw = ""
-                    sistem = "Sen YALNIZCA TURKCE konusan bir yapay zeka asistansin. Bu cok onemli: ASLA Cince, Japonca, Korece, Ingilizce veya baska dil karakteri yazma. Bir tek Latin alfabesi ve Turkce karakter kullan. Cevap icinde yabanci karakter gorursen o cumleyi sil ve Turkce yaz. Markdown formatini kullan: basliklar icin ##, kalin yazi icin **bold**, listeler icin - kullan."
+                    from datetime import datetime as _dtnow
+                    _mode_hint = "Maksimum 3 cumle ile kisa ve oz yanit ver. Madde listesi kullanma." if chat_mode == "hizli" else "Kapsamli, detayli ve analitik yanit ver. Alt basliklar ve ornekler kullan."
+                    sistem = f"""Sen Jarvis\'sin, Aktivra tarafindan gelistirilmis Turkce konusan zeki ve sicak bir yapay zeka asistanisin.
+KIMLIGIN: Adin Jarvis. Seni Aktivra gelistirdi. Kendini "Ben Jarvis, Aktivra'nin yapay zeka asistaniyim." diye tanit. Sicak ve samimi konusursun. Web arama sonuclarinda video linkleri veya YouTube onerileri VERME, sadece bilgi ver.
+MOD: {_mode_hint}
+TURKCE KURALI: KESINLIKLE sadece Turkce yaz. Asla Cince, Japonca veya baska dil karakteri kullanma.
+Markdown kullan: basliklar icin ##, kalin icin **bold**, listeler icin -.
+Bugun: {_dtnow.now().strftime('%Y-%m-%d %H:%M')}"""
                     # Context history formatla
                     ctx_msgs = []
                     for m in session_history[-6:]:
@@ -802,7 +857,7 @@ async def admin_stats(token: str):
             "SELECT id, isim, email, created_at, last_login FROM kullanicilar ORDER BY created_at DESC LIMIT 20"
         )).fetchall()
         recent_sessions = db.execute(text(
-            "SELECT session_id, MIN(created_at) as started, COUNT(*) as msg_count, LEFT(MAX(CASE WHEN role='user' THEN content END), 60) as preview FROM sohbet_gecmisi GROUP BY session_id ORDER BY started DESC LIMIT 20"
+            "SELECT sg.session_id, MIN(sg.created_at) as started, COUNT(*) as msg_count, COALESCE(st.title, LEFT((SELECT content FROM sohbet_gecmisi s2 WHERE s2.session_id = sg.session_id AND s2.role = 'user' ORDER BY s2.created_at ASC LIMIT 1), 60)) as preview FROM sohbet_gecmisi sg LEFT JOIN session_titles st ON sg.session_id = st.session_id GROUP BY sg.session_id, st.title ORDER BY started DESC LIMIT 20"
         )).fetchall()
         db.close()
         return {
