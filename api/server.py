@@ -344,7 +344,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     result = assistant.llm.process(resolved_text, db_history, mode=chat_mode)
                 category = result.get("kategori", "SOHBET")
                 text_norm = normalize(text)
-                bilgi = ["nedir","kimdir","nasil","anlat","kim","neden","hava","haber","sicaklik","acikla"]
+                bilgi = ["nedir","kimdir","nasil","anlat","kim","neden","hava","haber","sicaklik","acikla","dusun","fikir","ne dusunuyorsun","ile ilgili","hakkinda","ne biliyorsun","yorumun","degerlendirme","onerir","tavsiye"]
                 use_stream = category in ["WEB_ARAMA","SOHBET"] or any(k in text_norm for k in bilgi)
                 if use_stream:
                     if any(k in text_norm for k in ["hava","sicaklik","yagmur"]):
@@ -398,6 +398,22 @@ Bugun: {_dtnow.now().strftime('%Y-%m-%d %H:%M')}"""
                                             await websocket.send_text(json.dumps({"type": "stream", "text": token}))
                                     except:
                                         pass
+                    # Son 150 karakterde soru yoksa konuya gore soru ekle
+                    if full_text and full_text.strip() and "?" not in full_text[-150:]:
+                        # Konudan anahtar kelime al
+                        _konu_kelime = text.strip().split()[0] if text.strip() else "bu konu"
+                        # Konuya gore farkli soru sablonlari
+                        _soru_sablonlari = [
+                            f"\n\nPeki {_konu_kelime} ile ilgili kişisel deneyiminiz var mı?",
+                            f"\n\nBu konuda daha ayrıntılı bir şey sormak ister misiniz?",
+                            f"\n\nSizin bu konudaki görüşünüz nedir?",
+                        ]
+                        import hashlib as _hlib
+                        _idx = int(_hlib.md5(full_text[-30:].encode("utf-8", errors="ignore")).hexdigest()[:4], 16) % len(_soru_sablonlari)
+                        _ek_soru = _soru_sablonlari[_idx]
+                        full_text = full_text + _ek_soru
+                        # Soruyu stream token olarak gonder ki frontend gorsun
+                        await websocket.send_text(json.dumps({"type": "stream", "text": _ek_soru}))
                     await websocket.send_text(json.dumps({"type": "stream_end", "text": full_text}))
                     assistant.update_history(text, full_text)
                     _history.save_message(session_id, "assistant", full_text, user_id)
@@ -412,6 +428,17 @@ Bugun: {_dtnow.now().strftime('%Y-%m-%d %H:%M')}"""
                 else:
                     response = assistant.process(text)
                     assistant.update_history(text, response)
+                    # SOHBET modunda da soru ekle
+                    if response and "?" not in response[-150:]:
+                        _konu = text.strip().split()[0] if text.strip() else "bu konu"
+                        _ekler = [
+                            f"\n\nPeki {_konu} ile ilgili kişisel deneyiminiz var mı?",
+                            f"\n\nBu konuda daha fazla bilgi ister misiniz?",
+                            f"\n\nSizin bu konudaki görüşünüz nedir?",
+                        ]
+                        import hashlib as _h2
+                        _i2 = int(_h2.md5(response[-20:].encode()).hexdigest()[:4], 16) % len(_ekler)
+                        response += _ekler[_i2]
                     await websocket.send_text(json.dumps({"type": "response", "text": response}))
             except Exception as e:
                 await websocket.send_text(json.dumps({"type": "response", "text": str(e)}))
