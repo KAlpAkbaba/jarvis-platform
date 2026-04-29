@@ -247,6 +247,47 @@ async def websocket_endpoint(websocket: WebSocket):
                 if k in _text_lower:
                     _kimlik_yanit = v
                     break
+            # Kısa devam mesajları veya kişisel tercih — web aramasi yapma
+            # Bilgi sorusu mu, devam mesajı mı?
+            _bilgi_starter = ["nedir", "kimdir", "nasil", "neden", "ne zaman", "nerede", "anlat", "acikla", "hakkinda bilgi"]
+            _kisa_bilgi_sorusu = len(text.strip().split()) <= 4 and any(k in _text_lower for k in _bilgi_starter)
+            _kisisel_soru = (
+                any(k in _text_lower for k in ["sen hangisini", "senin tercih", "sence hangisi", "peki sen", "sen ne dusunuyorsun", "ya sen", "sen tercih"])
+                or (
+                    len(text.strip().split()) <= 4  # Kısa mesaj
+                    and len(session_history) > 2     # Aktif sohbet var
+                    and not _kisa_bilgi_sorusu       # Bilgi sorusu değil
+                )
+            )
+            if _kisisel_soru:
+                # Direkt stream yap, web aramasi olmadan
+                # Konuşma geçmişini mesaj listesi olarak hazırla
+                _gecmis_mesajlar = [{"role": m["role"], "content": m["content"]} for m in session_history[-6:]]
+                _kisisel_sistem = """Sen Jarvis'sin. Samimi, kisilikli ve konusmayi surdurebilen bir yapay zeka asistaniyim.
+Kullanicinin kisa veya kisisel mesajlarina dogal bir konusma ortagi gibi yanit ver.
+Nesnel bilgi verme, kisisel yorum yap. Kisa tut, cevabin sonunda konusmayi devam ettirecek bir soru sor."""
+                _kisisel_prompt = text
+                _kisisel_full = ""
+                await websocket.send_text(json.dumps({"type": "stream_start"}))
+                async with httpx.AsyncClient(timeout=30) as _kpc:
+                    async with _kpc.stream("POST", "http://172.17.0.1:11434/api/chat", json={
+                        "model": config.llm_model,
+                        "messages": [{"role": "system", "content": _kisisel_sistem}] + _gecmis_mesajlar + [{"role": "user", "content": _kisisel_prompt}],
+                        "stream": True
+                    }) as _kpr:
+                        async for _kline in _kpr.aiter_lines():
+                            if _kline:
+                                try:
+                                    _kchunk = json.loads(_kline)
+                                    _ktoken = _kchunk.get("message", {}).get("content", "")
+                                    if _ktoken:
+                                        _kisisel_full += _ktoken
+                                        await websocket.send_text(json.dumps({"type": "stream", "text": _ktoken}))
+                                except: pass
+                await websocket.send_text(json.dumps({"type": "stream_end", "text": _kisisel_full}))
+                _history.save_message(session_id, "assistant", _kisisel_full, user_id)
+                continue
+
             if _kimlik_yanit:
                 _history.save_message(session_id, "assistant", _kimlik_yanit, user_id)
                 await websocket.send_text(json.dumps({"type": "stream_start"}))
