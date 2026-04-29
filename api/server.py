@@ -1561,6 +1561,54 @@ async def get_profile(token: str):
     except Exception as e:
         return {"error": str(e)}
 
+
+@app.get("/calendar/events/day")
+async def calendar_events_day(user_id: int, date: str = "", token: str = ""):
+    """Belirli bir günün etkinliklerini getirir."""
+    try:
+        from datetime import datetime as _dt2, timedelta as _td2
+        import requests as _req
+        if date:
+            target = _dt2.fromisoformat(date)
+        else:
+            target = _dt2.utcnow()
+        start_of_day = target.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day   = target.replace(hour=23, minute=59, second=59, microsecond=999999)
+        from database.db import SessionLocal as _SL
+        from sqlalchemy import text as _text
+        _db = _SL()
+        _rows = _db.execute(_text("SELECT provider, access_token, refresh_token FROM kullanici_takvim_tokenlar WHERE kullanici_id = :u AND provider IN ('google','microsoft')"), {"u": user_id}).fetchall()
+        _db.close()
+        events = []
+        for row in _rows:
+            prov, at, rt = row
+            if prov == 'google':
+                try:
+                    from google.oauth2.credentials import Credentials
+                    from googleapiclient.discovery import build
+                    import json as _js
+                    with open(GOOGLE_WEB_CREDS) as f:
+                        cfg = _js.load(f)['web']
+                    creds = Credentials(token=at, refresh_token=rt, token_uri='https://oauth2.googleapis.com/token', client_id=cfg['client_id'], client_secret=cfg['client_secret'])
+                    svc = build('calendar', 'v3', credentials=creds)
+                    evts = svc.events().list(calendarId='primary', timeMin=start_of_day.isoformat()+'Z', timeMax=end_of_day.isoformat()+'Z', maxResults=20, singleEvents=True, orderBy='startTime').execute().get('items', [])
+                    for e in evts:
+                        events.append({"id": e.get('id'), "title": e.get('summary','Başlıksız'), "start": e.get('start',{}).get('dateTime', e.get('start',{}).get('date')), "end": e.get('end',{}).get('dateTime', e.get('end',{}).get('date')), "provider": "Google"})
+                except Exception as ge:
+                    print(f"Google events error: {ge}")
+            elif prov == 'microsoft':
+                try:
+                    hdrs = {'Authorization': 'Bearer ' + at}
+                    r = _req.get(f'https://graph.microsoft.com/v1.0/me/calendarview?startDateTime={start_of_day.isoformat()}Z&endDateTime={end_of_day.isoformat()}Z&$top=20&$orderby=start/dateTime', headers=hdrs)
+                    for e in r.json().get('value', []):
+                        events.append({"id": e.get('id'), "title": e.get('subject','Başlıksız'), "start": e.get('start',{}).get('dateTime'), "end": e.get('end',{}).get('dateTime'), "provider": "Outlook"})
+                except Exception as me:
+                    print(f"MS events error: {me}")
+        events.sort(key=lambda x: x.get('start') or '')
+        return {"events": events}
+    except Exception as e:
+        return {"events": [], "error": str(e)}
+
 # ── Login OAuth ──────────────────────────────────────────────────────────────
 @app.get("/auth/login/google")
 async def login_google():
