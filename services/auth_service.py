@@ -24,7 +24,43 @@ class AuthService:
     def create_token(self) -> str:
         return secrets.token_urlsafe(32)
 
-    def send_verification_email(self, email: str, isim: str, token: str):
+    def send_welcome_email(self, email: str, isim: str):
+        try:
+            resend.Emails.send({
+                "from": "Jarvis AI <noreply@aktivra.com>",
+                "to": email,
+                "subject": "Jarvis AI'ya Hoş Geldiniz!",
+                "html": f"""
+                <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#0a0a0a;color:#f0f0f0;border-radius:16px;overflow:hidden">
+                  <div style="background:#111;padding:32px;text-align:center;border-bottom:1px solid #222">
+                    <div style="width:48px;height:48px;background:#fff;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#0a0a0a;margin-bottom:12px">J</div>
+                    <h1 style="margin:0;font-size:20px;font-weight:700;letter-spacing:.04em">JARVIS AI</h1>
+                  </div>
+                  <div style="padding:36px 32px">
+                    <h2 style="margin:0 0 12px;font-size:18px;font-weight:600">Hoş Geldiniz{', ' + isim if isim else ''}! 🎉</h2>
+                    <p style="margin:0 0 20px;color:#888;font-size:14px;line-height:1.7">
+                      Jarvis AI ailesine katıldığınız için teşekkür ederiz.<br>
+                      Artık yapay zeka asistanınıza her an, her yerden erişebilirsiniz.
+                    </p>
+                    <div style="background:#1a1a1a;border-radius:12px;padding:20px;margin-bottom:20px">
+                      <p style="margin:0 0 10px;font-size:13px;color:#aaa;font-weight:600">NELER YAPABİLİRSİNİZ?</p>
+                      <p style="margin:4px 0;font-size:13px;color:#888">🔍 Web araması ve güncel bilgiler</p>
+                      <p style="margin:4px 0;font-size:13px;color:#888">📅 Google ve Outlook takvim entegrasyonu</p>
+                      <p style="margin:4px 0;font-size:13px;color:#888">🎙️ Sesli komutlar</p>
+                      <p style="margin:4px 0;font-size:13px;color:#888">📝 Not alma ve hatırlatıcılar</p>
+                    </div>
+                    <a href="https://aktivra.com" style="display:inline-block;padding:14px 28px;background:#fff;color:#0a0a0a;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px">
+                      Hemen Başlayın →
+                    </a>
+                  </div>
+                  <div style="padding:16px 32px;border-top:1px solid #222;text-align:center">
+                    <p style="margin:0;color:#555;font-size:11px">© 2026 Aktivra · Tüm hakları saklıdır.</p>
+                  </div>
+                </div>
+                """
+            })
+        except Exception as e:
+            print(f"Hosgeldin maili gonderilemedi: {e}")
         verify_url = f"https://aktivra.com/verify-email?token={token}"
         try:
             resend.Emails.send({
@@ -100,6 +136,7 @@ class AuthService:
             session_token = self._create_session(db, row[0])
             user = db.execute(text("SELECT isim, email FROM kullanicilar WHERE id = :id"), {"id": row[0]}).fetchone()
             db.close()
+            self.send_welcome_email(user[1], user[0])
             return {"success": True, "token": session_token, "user_id": row[0], "isim": user[0], "email": user[1]}
         except Exception as e:
             return {"error": str(e)}
@@ -162,6 +199,11 @@ class AuthService:
                     f"INSERT INTO kullanicilar (email, isim, {col}, avatar_url, email_verified) VALUES (:e, :i, :p, :a, TRUE) RETURNING id, isim"
                 ), {"e": email, "i": isim, "p": provider_id, "a": avatar_url})
                 user = result.fetchone()
+                db.commit()
+                token = self._create_session(db, user[0])
+                db.close()
+                self.send_welcome_email(email, isim)
+                return {"token": token, "user_id": user[0], "isim": user[1], "email": email, "avatar_url": avatar_url}
             else:
                 db.execute(text(
                     f"UPDATE kullanicilar SET {col} = :p, last_login = NOW(), email_verified = TRUE WHERE id = :id"

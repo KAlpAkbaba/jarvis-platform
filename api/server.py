@@ -39,6 +39,148 @@ async def root():
 async def health():
     return {"status": "ok", "model": config.llm_model}
 
+
+async def generate_session_title(session_id: str, first_user_msg: str, first_assistant_msg: str):
+    """İlk mesajdan kısa konu başlığı üretir ve DB'ye kaydeder."""
+    try:
+        import httpx as _hx, json as _js
+        prompt = f"Kullanici mesaji: {first_user_msg}\nAsistan cevabi: {first_assistant_msg[:200]}\nBu sohbetin konusunu 4-6 kelimeyle ozetle. Sadece ozet yaz, baska hicbir sey yazma."
+        async with _hx.AsyncClient(timeout=15) as cl:
+            r = await cl.post("http://172.17.0.1:11434/api/chat", json={
+                "model": "qwen2.5:7b",
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False
+            })
+            title = r.json().get("message", {}).get("content", "").strip()[:60]
+            if title:
+                from database.db import SessionLocal as _SL2
+                from sqlalchemy import text as _t2
+                _db2 = _SL2()
+                _db2.execute(_t2(
+                    "UPDATE sohbet_gecmisi SET content = :c WHERE session_id = :s AND id = (SELECT MIN(id) FROM sohbet_gecmisi WHERE session_id = :s AND role = 'user')"
+                ), {"c": title, "s": session_id})
+                _db2.commit()
+                _db2.close()
+    except Exception as _e:
+        print(f"Session title error: {_e}")
+
+def load_session_history(session_id: str, limit: int = 12):
+    """Session'ın DB geçmişini yükler."""
+    try:
+        from database.db import SessionLocal as _SL3
+        from sqlalchemy import text as _t3
+        _db3 = _SL3()
+        rows = _db3.execute(_t3(
+            "SELECT role, content FROM sohbet_gecmisi WHERE session_id = :s ORDER BY created_at DESC LIMIT :l"
+        ), {"s": session_id, "l": limit}).fetchall()
+        _db3.close()
+        history = [{"role": r[0], "content": r[1]} for r in reversed(rows)]
+        return history
+    except:
+        return []
+
+def extract_topic(history: list) -> str:
+    """Son konuşmadan ana konuyu/nesneyi çıkarır."""
+    for msg in reversed(history):
+        if msg["role"] == "user":
+            content = msg["content"].strip()
+            # 10 kelimeden uzun mesajlarda konu var demektir
+            if len(content.split()) >= 3:
+                return content
+    return ""
+
+def resolve_context(text: str, history: list) -> str:
+    """Kısa/belirsiz mesajlara önceki konuyu ekler."""
+    words = text.strip().split()
+    # 5 kelimeden kısa ve soru işareti içeriyorsa veya
+    # "nerede", "ne zaman", "kim", "nasıl", "neden", "ne kadar" ile başlıyorsa
+    short_question_starters = ["nerede", "ne zaman", "kim", "nasil", "neden", "ne kadar",
+                                "kac", "hangi", "ne ile", "neden", "ne kadar", "kimin",
+                                "neye", "neyle", "nereye", "nereden"]
+    is_short = len(words) <= 6
+    starts_with_question = any(text.lower().startswith(s) for s in short_question_starters)
+    has_pronoun = any(w in text.lower() for w in ["bu", "onu", "onun", "bunun", "bunu", "orada", "burasi", "orasi"])
+
+    if (is_short and starts_with_question) or has_pronoun:
+        topic = extract_topic(history[:-1] if history else [])  # son user msg hariç
+        if topic and topic.lower() not in text.lower():
+            # Ana nesneyi bul - son uzun user mesajından ilk birkaç kelime
+            topic_words = topic.split()[:4]
+            topic_short = " ".join(topic_words)
+            return f"{topic_short} - {text}"
+    return text
+
+
+async def generate_session_title(session_id: str, first_user_msg: str, first_assistant_msg: str):
+    """İlk mesajdan kısa konu başlığı üretir ve DB'ye kaydeder."""
+    try:
+        import httpx as _hx, json as _js
+        prompt = f"Kullanici mesaji: {first_user_msg}\nAsistan cevabi: {first_assistant_msg[:200]}\nBu sohbetin konusunu 4-6 kelimeyle ozetle. Sadece ozet yaz, baska hicbir sey yazma."
+        async with _hx.AsyncClient(timeout=15) as cl:
+            r = await cl.post("http://172.17.0.1:11434/api/chat", json={
+                "model": "qwen2.5:7b",
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False
+            })
+            title = r.json().get("message", {}).get("content", "").strip()[:60]
+            if title:
+                from database.db import SessionLocal as _SL2
+                from sqlalchemy import text as _t2
+                _db2 = _SL2()
+                _db2.execute(_t2(
+                    "UPDATE sohbet_gecmisi SET content = :c WHERE session_id = :s AND id = (SELECT MIN(id) FROM sohbet_gecmisi WHERE session_id = :s AND role = 'user')"
+                ), {"c": title, "s": session_id})
+                _db2.commit()
+                _db2.close()
+    except Exception as _e:
+        print(f"Session title error: {_e}")
+
+def load_session_history(session_id: str, limit: int = 12):
+    """Session'ın DB geçmişini yükler."""
+    try:
+        from database.db import SessionLocal as _SL3
+        from sqlalchemy import text as _t3
+        _db3 = _SL3()
+        rows = _db3.execute(_t3(
+            "SELECT role, content FROM sohbet_gecmisi WHERE session_id = :s ORDER BY created_at DESC LIMIT :l"
+        ), {"s": session_id, "l": limit}).fetchall()
+        _db3.close()
+        history = [{"role": r[0], "content": r[1]} for r in reversed(rows)]
+        return history
+    except:
+        return []
+
+def extract_topic(history: list) -> str:
+    """Son konuşmadan ana konuyu/nesneyi çıkarır."""
+    for msg in reversed(history):
+        if msg["role"] == "user":
+            content = msg["content"].strip()
+            # 10 kelimeden uzun mesajlarda konu var demektir
+            if len(content.split()) >= 3:
+                return content
+    return ""
+
+def resolve_context(text: str, history: list) -> str:
+    """Kısa/belirsiz mesajlara önceki konuyu ekler."""
+    words = text.strip().split()
+    # 5 kelimeden kısa ve soru işareti içeriyorsa veya
+    # "nerede", "ne zaman", "kim", "nasıl", "neden", "ne kadar" ile başlıyorsa
+    short_question_starters = ["nerede", "ne zaman", "kim", "nasil", "neden", "ne kadar",
+                                "kac", "hangi", "ne ile", "neden", "ne kadar", "kimin",
+                                "neye", "neyle", "nereye", "nereden"]
+    is_short = len(words) <= 6
+    starts_with_question = any(text.lower().startswith(s) for s in short_question_starters)
+    has_pronoun = any(w in text.lower() for w in ["bu", "onu", "onun", "bunun", "bunu", "orada", "burasi", "orasi"])
+
+    if (is_short and starts_with_question) or has_pronoun:
+        topic = extract_topic(history[:-1] if history else [])  # son user msg hariç
+        if topic and topic.lower() not in text.lower():
+            # Ana nesneyi bul - son uzun user mesajından ilk birkaç kelime
+            topic_words = topic.split()[:4]
+            topic_short = " ".join(topic_words)
+            return f"{topic_short} - {text}"
+    return text
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -56,7 +198,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
             # Kullanici mesajini kaydet
             user_id = payload.get("user_id")
+            # Session geçmişini yükle
+            session_history = load_session_history(session_id)
+            # Konu takibi — kısa/belirsiz sorulara önceki konuyu ekle
+            resolved_text = resolve_context(text, session_history)
             _history.save_message(session_id, "user", text, user_id)
+            # İlk mesaj mı? Başlık üretimi için bayrak
+            is_first_msg = len([m for m in session_history if m["role"] == "user"]) == 0
             try:
                 # Takvim kontrolu - WebSocket icin
                 from core.router import normalize
@@ -130,7 +278,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     _history.save_message(session_id, "assistant", cal_response, user_id)
                     await websocket.send_text(json.dumps({"type": "response", "text": cal_response}))
                     continue
-                result = assistant.llm.process(text, assistant.context.to_list())
+                # DB geçmişini LLM'e ilet + resolved text kullan
+                db_history = [{"role": m["role"], "content": m["content"]} for m in session_history[-8:]]
+                result = assistant.llm.process(resolved_text, db_history)
                 category = result.get("kategori", "SOHBET")
                 text_norm = normalize(text)
                 bilgi = ["nedir","kimdir","nasil","anlat","kim","neden","hava","haber","sicaklik","acikla"]
@@ -144,11 +294,17 @@ async def websocket_endpoint(websocket: WebSocket):
                         raw = assistant.search.search(text)
                     else:
                         raw = ""
-                    sistem = "Sen yalnizca TURKCE konusan bir yapay zeka asistansin. KESINLIKLE sadece Turkce kullan."
+                    sistem = "Sen YALNIZCA TURKCE konusan bir yapay zeka asistansin. Bu cok onemli: ASLA Cince, Japonca, Korece, Ingilizce veya baska dil karakteri yazma. Bir tek Latin alfabesi ve Turkce karakter kullan. Cevap icinde yabanci karakter gorursen o cumleyi sil ve Turkce yaz. Markdown formatini kullan: basliklar icin ##, kalin yazi icin **bold**, listeler icin - kullan."
+                    # Context history formatla
+                    ctx_msgs = []
+                    for m in session_history[-6:]:
+                        ctx_msgs.append({"role": m["role"], "content": m["content"]})
+                    import re as _re2
+                    raw = _re2.sub(r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]", "", raw)
                     if raw and len(raw) > 20:
-                        prompt = f"Soru: {text}\nBilgi: {raw[:600]}\nTURKCE olarak detayli cevapla."
+                        prompt = f"Soru: {resolved_text}\nArama sonucu (sadece Turkce kullan): {raw[:500]}\nYALNIZCA TURKCE cevapla. Asla Cince veya yabanci karakter yazma."
                     else:
-                        prompt = f"Soru: {text}\nBu soruyu TURKCE olarak cevapla."
+                        prompt = f"Soru: {resolved_text}\nYALNIZCA TURKCE olarak cevapla."
                     full_text = ""
                     await websocket.send_text(json.dumps({"type": "stream_start"}))
                     async with httpx.AsyncClient(timeout=60) as client:
@@ -156,6 +312,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             "model": config.llm_model,
                             "messages": [
                                 {"role": "system", "content": sistem},
+                                *ctx_msgs[:-1],  # önceki geçmiş (son user hariç)
                                 {"role": "user", "content": prompt}
                             ],
                             "stream": True,
@@ -173,6 +330,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_text(json.dumps({"type": "stream_end", "text": full_text}))
                     assistant.update_history(text, full_text)
                     _history.save_message(session_id, "assistant", full_text, user_id)
+                    # İlk mesajsa başlık üret
+                    if is_first_msg and full_text:
+                        import asyncio
+                        asyncio.create_task(generate_session_title(session_id, text, full_text))
+                    # İlk mesajsa başlık üret
+                    if is_first_msg and full_text:
+                        import asyncio
+                        asyncio.create_task(generate_session_title(session_id, text, full_text))
                 else:
                     response = assistant.process(text)
                     assistant.update_history(text, response)
@@ -885,3 +1050,97 @@ async def calendar_status(user_id: int, token: str):
         return {"google": "google" in providers, "microsoft": "microsoft" in providers}
     except Exception as e:
         return {"error": str(e)}
+
+# ── Login OAuth ──────────────────────────────────────────────────────────────
+@app.get("/auth/login/google")
+async def login_google():
+    try:
+        from urllib.parse import urlencode
+        with open(GOOGLE_WEB_CREDS) as f:
+            cfg = _json.load(f)['web']
+        params = {
+            'response_type': 'code',
+            'client_id': cfg['client_id'],
+            'redirect_uri': REDIRECT_BASE + '/auth/login/google/callback',
+            'scope': 'openid email profile',
+            'access_type': 'offline',
+            'prompt': 'select_account',
+        }
+        url = 'https://accounts.google.com/o/oauth2/auth?' + urlencode(params)
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=url)
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/auth/login/google/callback")
+async def login_google_callback(code: str, state: str = ""):
+    try:
+        import requests as _req
+        with open(GOOGLE_WEB_CREDS) as f:
+            cfg = _json.load(f)['web']
+        res = _req.post('https://oauth2.googleapis.com/token', data={
+            'code': code,
+            'client_id': cfg['client_id'],
+            'client_secret': cfg['client_secret'],
+            'redirect_uri': REDIRECT_BASE + '/auth/login/google/callback',
+            'grant_type': 'authorization_code',
+        })
+        tokens = res.json()
+        if 'access_token' not in tokens:
+            return RedirectResponse(url='https://aktivra.com/?login_error=google')
+        userinfo = _req.get('https://www.googleapis.com/oauth2/v2/userinfo',
+            headers={'Authorization': 'Bearer ' + tokens['access_token']}).json()
+        email = userinfo.get('email', '')
+        isim  = userinfo.get('name', '')
+        sub   = userinfo.get('id', '')
+        result = _auth.oauth_login(email, isim, sub, 'google', userinfo.get('picture'))
+        if 'error' in result:
+            return RedirectResponse(url='https://aktivra.com/?login_error=google')
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=f"https://aktivra.com/?oauth_token={result['token']}&oauth_user={_json.dumps({'user_id':result['user_id'],'isim':result['isim'],'email':result['email']})}")
+    except Exception as e:
+        return RedirectResponse(url='https://aktivra.com/?login_error=google')
+
+@app.get("/auth/login/microsoft")
+async def login_microsoft():
+    try:
+        from urllib.parse import urlencode
+        params = {
+            'client_id': '9b1ecc4d-c0cc-4123-8ec1-522c8f278ecf',
+            'response_type': 'code',
+            'redirect_uri': REDIRECT_BASE + '/auth/login/microsoft/callback',
+            'scope': 'openid email profile User.Read',
+            'response_mode': 'query',
+        }
+        url = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?' + urlencode(params)
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=url)
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/auth/login/microsoft/callback")
+async def login_microsoft_callback(code: str, state: str = ""):
+    try:
+        import requests as _req
+        res = _req.post('https://login.microsoftonline.com/common/oauth2/v2.0/token', data={
+            'client_id': '9b1ecc4d-c0cc-4123-8ec1-522c8f278ecf',
+            'client_secret': '***REMOVED***',
+            'code': code,
+            'redirect_uri': REDIRECT_BASE + '/auth/login/microsoft/callback',
+            'grant_type': 'authorization_code',
+        })
+        tokens = res.json()
+        if 'access_token' not in tokens:
+            return RedirectResponse(url='https://aktivra.com/?login_error=microsoft')
+        userinfo = _req.get('https://graph.microsoft.com/v1.0/me',
+            headers={'Authorization': 'Bearer ' + tokens['access_token']}).json()
+        email = userinfo.get('mail') or userinfo.get('userPrincipalName', '')
+        isim  = userinfo.get('displayName', '')
+        sub   = userinfo.get('id', '')
+        result = _auth.oauth_login(email, isim, sub, 'microsoft')
+        if 'error' in result:
+            return RedirectResponse(url='https://aktivra.com/?login_error=microsoft')
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=f"https://aktivra.com/?oauth_token={result['token']}&oauth_user={_json.dumps({'user_id':result['user_id'],'isim':result['isim'],'email':result['email']})}")
+    except Exception as e:
+        return RedirectResponse(url='https://aktivra.com/?login_error=microsoft')

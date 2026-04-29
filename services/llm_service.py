@@ -17,7 +17,7 @@ class LLMService:
         saat = now.strftime("%H:%M")
         yarin = (now + timedelta(days=1)).strftime("%Y-%m-%d")
         oburgunu = (now + timedelta(days=2)).strftime("%Y-%m-%d")
-        return f"""Sen Turkce konusan zeki bir yapay zeka asistansin.
+        return f"""Sen YALNIZCA TURKCE konusan zeki bir yapay zeka asistansin. KESINLIKLE sadece Turkce yaz, asla Cince, Japonca, Ingilizce veya baska dil karakteri kullanma.
 Bugun: {today}, Saat: {saat}, Yarin: {yarin}, Oburgunu: {oburgunu}
 
 Asagidaki JSON formatinda yanit ver. Baska hicbir sey yazma:
