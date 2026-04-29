@@ -26,6 +26,7 @@ app.add_middleware(
 )
 
 active_connections = []
+_yt_cache_store = {}  # session_id -> youtube links cache
 
 @app.get("/")
 async def root():
@@ -238,6 +239,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 "nasil olusturuldun": "Aktivra ekibi tarafindan gelistirildim.",
                 "nasil yapildin": "Aktivra muhendisleri tarafindan yapay zeka teknolojileriyle olusturuldum.",
             }
+            # YouTube link isteği — cache'den direkt ver
+            _link_keys = ["link", "url", "izlemek", "linkleri", "linkini", "linklerini"]
+            if any(k in text.lower() for k in _link_keys) and session_id in _yt_cache_store:
+                _link_resp = "İşte linkler:\n\n" + _yt_cache_store[session_id]
+                _history.save_message(session_id, "assistant", _link_resp, user_id)
+                await websocket.send_text(json.dumps({"type": "response", "text": _link_resp}))
+                continue
+
             # Turkce karakterleri normalize et
             def _normalize_tr(s):
                 return s.lower().replace('ş','s').replace('ğ','g').replace('ü','u').replace('ö','o').replace('ı','i').replace('ç','c').replace('Ş','s').replace('Ğ','g').replace('Ü','u').replace('Ö','o').replace('İ','i').replace('Ç','c')
@@ -351,6 +360,7 @@ Nesnel bilgi verme, kisisel yorum yap. Kisa tut, cevabin sonunda konusmayi devam
                 from core.router import normalize
                 text_norm_ws = normalize(text.lower())
                 takvim_goster_ws = ["takvim", "etkinlik", "randevu", "ajanda"]
+                youtube_ws = ["youtube", "video izle", "kanal", "icerik uretici", "youtuber", "en yeni video", "son video", "youtube'da"]
                 takvim_ekle_ws = ["takvime ekle", "etkinlik ekle", "randevu ekle", "toplanti ekle", "hatirlatici ekle", "ekle takvime", "takvime yaz", "toplantisi ekle", "toplanti ayarla", "randevu ayarla", "saat ekle", "toplanti kur"]
                 hava_ws = ["hava", "sicaklik", "yagis", "derece"]
                 tarih_ws = ["bugun", "saat kac", "tarih", "ayın kaci", "ayin kaci"]
@@ -358,6 +368,63 @@ Nesnel bilgi verme, kisisel yorum yap. Kisa tut, cevabin sonunda konusmayi devam
                 _has_ekle = "ekle" in text_norm_ws
                 _has_time = any(k in text_norm_ws for k in ["saat", "yarin", "bugun", "pazartesi", "sali", "carsamba", "persembe", "cuma", "cumartesi", "pazar", "hafta", "tarih"])
                 _is_takvim_ekle = any(k in text_norm_ws for k in takvim_ekle_ws) or (_has_ekle and _has_time)
+                # YouTube handler
+                if any(k in text_norm_ws for k in youtube_ws):
+                    from core.router import normalize as _norm_yt
+                    _yt_text = text.lower()
+                    if any(k in _yt_text for k in ["kanal", "icerik uretici", "youtuber", "son videolar", "en yeni videolar"]):
+                        _yt_query = text
+                        for rm in ["youtube", "kanalinin", "kanalı", "en yeni videoları", "son videoları", "videoları", "hakkında", "içerik üretici", "son videosu", "son video"]:
+                            _yt_query = _yt_query.lower().replace(rm, "").strip()
+                        yt_result = _youtube.get_channel_videos(_yt_query.strip())
+                    else:
+                        _yt_query = text
+                        for rm in ["youtube", "youtube'da", "videolar", "video", "izle", "hakkında", "en yeni", "son"]:
+                            _yt_query = _yt_query.lower().replace(rm, "").strip()
+                        yt_result = _youtube.search_videos(_yt_query.strip())
+                    import re as _re_yt
+                    _link_keywords = ["link", "url", "izlemek", "tikla", "ac ", "aç"]
+                    _show_links = any(k in text.lower() for k in _link_keywords)
+                    if not _show_links:
+                        yt_result = _re_yt.sub(r'\[LINK:[^\]]+\]', '', yt_result)
+                    else:
+                        yt_result = _re_yt.sub(r"\[LINK:([^\]]+)\]", lambda m: " Link: " + m.group(1), yt_result)
+                    import re as _re_yt
+                    _link_keywords = ["link", "url", "izlemek", "tikla", "ac", "aç"]
+                    _show_links = any(k in text_norm_ws for k in _link_keywords)
+                    if not _show_links:
+                        yt_result = _re_yt.sub(r'\[LINK:[^\]]+\]', '', yt_result)
+                    else:
+                        yt_result = _re_yt.sub(r'\[LINK:([^\]]+)\]', r'\n  Link: \1', yt_result)
+                    # LLM ile özetle
+                    await websocket.send_text(json.dumps({"type": "stream_start"}))
+                    _yt_full = ""
+                    async with httpx.AsyncClient(timeout=30) as _ytc:
+                        async with _ytc.stream("POST", "http://172.17.0.1:11434/api/chat", json={
+                            "model": config.llm_model,
+                            "messages": [
+                                {"role": "system", "content": "Sen Jarvis'sin. YouTube video bilgilerini samimi sekilde sun. Turkce yaz. KESİNLİKLE link, URL veya tiklanabilir baglanti gosterme. Sadece video basligini, kanal adini ve yayin tarihini yaz. Kullanici 'link ver', 'izlemek istiyorum', 'url ver' derse o zaman link goster."},
+                                {"role": "user", "content": f"Kullanici sorusu: {text}\n\nYouTube sonuclari:\n{yt_result}\n\nBu sonuclari kullaniciya sun ve kendi yorumunu ekle."}
+                            ],
+                            "stream": True
+                        }) as _ytr:
+                            async for _ytl in _ytr.aiter_lines():
+                                if _ytl:
+                                    try:
+                                        _ytchunk = json.loads(_ytl)
+                                        _yttoken = _ytchunk.get("message", {}).get("content", "")
+                                        if _yttoken:
+                                            _yt_full += _yttoken
+                                            await websocket.send_text(json.dumps({"type": "stream", "text": _yttoken}))
+                                    except: pass
+                    await websocket.send_text(json.dumps({"type": "stream_end", "text": _yt_full}))
+                    _history.save_message(session_id, "assistant", _yt_full, user_id)
+                    # Son YouTube sonuçlarını belleğe al
+                    _yt_with_links = _re_yt.sub(r"\[LINK:([^\]]+)\]", lambda m: " Link: " + m.group(1), yt_result)
+                    _yt_cache_store[session_id] = _yt_with_links[:3000]
+                    print(f"YT CACHE SAVED: {session_id} len={len(_yt_with_links)}")
+                    continue
+
                 if _is_takvim_ekle or any(k in text_norm_ws for k in takvim_goster_ws) or any(k in text_norm_ws for k in hava_ws) or any(k in text_norm_ws for k in tarih_ws):
                     if _is_takvim_ekle and user_id:
                         # LLM ile etkinlik bilgilerini parse et
@@ -941,6 +1008,8 @@ async def search_history(q: str):
     return {"results": _history.search_history(q)}
 
 from services.auth_service import AuthService
+from services.youtube_service import YouTubeService
+_youtube = YouTubeService()
 _auth = AuthService()
 
 @app.post("/auth/register")
