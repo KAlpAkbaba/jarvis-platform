@@ -3,7 +3,7 @@ services:
     image: postgres:15
     container_name: jarvis_db
     environment:
-      POSTGRES_PASSWORD: ***REMOVED***
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env icinde tanimlanmali}
       POSTGRES_DB: asistan
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -20,7 +20,7 @@ services:
     volumes:
       - ./searxng:/etc/searxng
     environment:
-      SEARXNG_SECRET_KEY: ***REMOVED***
+      SEARXNG_SECRET_KEY: ${SEARXNG_SECRET_KEY:?SEARXNG_SECRET_KEY .env icinde tanimlanmali}
     restart: unless-stopped
 
   jarvis-api:
@@ -31,10 +31,9 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://postgres:***REMOVED***@postgres:5432/asistan
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/asistan
       SEARXNG_URL: http://searxng:8080/search
       OLLAMA_URL: http://172.17.0.1:11434/api/chat
-      ELEVENLABS_API_KEY: ***REMOVED***
     depends_on:
       postgres:
         condition: service_healthy

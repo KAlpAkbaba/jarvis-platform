@@ -1,6 +1,6 @@
 use_default_settings: true
 server:
-  secret_key: "***REMOVED***"
+  secret_key: "change-me"  # SEARXNG_SECRET_KEY env degiskeni bunu ezer
   limiter: false
 search:
   formats:

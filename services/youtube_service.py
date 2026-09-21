@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
+import os
 import requests
 from datetime import datetime
 
-YOUTUBE_API_KEY = "***REMOVED***"
+YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY', '')
 YOUTUBE_BASE = "https://www.googleapis.com/youtube/v3"
 
 class YouTubeService:

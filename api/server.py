@@ -1,4 +1,5 @@
 import os
+import secrets
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import json
@@ -906,9 +907,9 @@ async def add_event(request: dict):
 
 import msal
 
-OUTLOOK_CLIENT_ID = "9b1ecc4d-c0cc-4123-8ec1-522c8f278ecf"
-OUTLOOK_TENANT_ID = "46642cdf-f4a1-45ee-bd35-1defe8fd90a0"
-OUTLOOK_CLIENT_SECRET = "***REMOVED***"
+OUTLOOK_CLIENT_ID = os.getenv('MICROSOFT_CLIENT_ID', '')
+OUTLOOK_TENANT_ID = os.getenv('MICROSOFT_TENANT_ID', 'common')
+OUTLOOK_CLIENT_SECRET = os.getenv('MICROSOFT_CLIENT_SECRET', '')
 OUTLOOK_SCOPES = ["Calendars.ReadWrite", "User.Read"]
 _outlook_token = None
 _outlook_flow = None
@@ -1099,7 +1100,7 @@ async def refresh_outlook_token():
                 rt = data.get('refresh_token', '')
                 if rt:
                     res = requests.post('https://login.microsoftonline.com/common/oauth2/v2.0/token', data={
-                        'client_id': '9b1ecc4d-c0cc-4123-8ec1-522c8f278ecf',
+                        'client_id': MICROSOFT_CLIENT_ID,
                         'refresh_token': rt,
                         'grant_type': 'refresh_token',
                         'scope': 'Calendars.ReadWrite User.Read offline_access',
@@ -1117,10 +1118,10 @@ async def refresh_outlook_token():
 async def startup_event():
     asyncio.create_task(refresh_outlook_token())
 
-ADMIN_TOKEN = "***REMOVED***"
+ADMIN_TOKEN = os.getenv('ADMIN_TOKEN', '')
 
 def verify_admin(token: str):
-    return token == ADMIN_TOKEN
+    return bool(ADMIN_TOKEN) and secrets.compare_digest(token or "", ADMIN_TOKEN)
 
 @app.get("/admin/stats")
 async def admin_stats(token: str):
@@ -1195,8 +1196,8 @@ async def admin_delete_user(user_id: int, token: str):
 import json as _json
 
 GOOGLE_WEB_CREDS = '/app/data/google_web_credentials.json'
-MICROSOFT_CLIENT_ID = '9b1ecc4d-c0cc-4123-8ec1-522c8f278ecf'
-MICROSOFT_CLIENT_SECRET = '***REMOVED***'
+MICROSOFT_CLIENT_ID = os.getenv('MICROSOFT_CLIENT_ID', '')
+MICROSOFT_CLIENT_SECRET = os.getenv('MICROSOFT_CLIENT_SECRET', '')
 REDIRECT_BASE = 'https://aktivra.com/api'
 
 @app.get("/auth/google/url")
@@ -1733,7 +1734,7 @@ async def login_microsoft():
     try:
         from urllib.parse import urlencode
         params = {
-            'client_id': '9b1ecc4d-c0cc-4123-8ec1-522c8f278ecf',
+            'client_id': MICROSOFT_CLIENT_ID,
             'response_type': 'code',
             'redirect_uri': REDIRECT_BASE + '/auth/login/microsoft/callback',
             'scope': 'openid email profile User.Read',
@@ -1750,8 +1751,8 @@ async def login_microsoft_callback(code: str, state: str = ""):
     try:
         import requests as _req
         res = _req.post('https://login.microsoftonline.com/common/oauth2/v2.0/token', data={
-            'client_id': '9b1ecc4d-c0cc-4123-8ec1-522c8f278ecf',
-            'client_secret': '***REMOVED***',
+            'client_id': MICROSOFT_CLIENT_ID,
+            'client_secret': MICROSOFT_CLIENT_SECRET,
             'code': code,
             'redirect_uri': REDIRECT_BASE + '/auth/login/microsoft/callback',
             'grant_type': 'authorization_code',

@@ -19,7 +19,7 @@ if os.path.exists(token_path):
         rt = data.get('refresh_token', '')
         if rt:
             res = requests.post('https://login.microsoftonline.com/common/oauth2/v2.0/token', data={
-                'client_id': '9b1ecc4d-c0cc-4123-8ec1-522c8f278ecf',
+                'client_id': os.getenv('MICROSOFT_CLIENT_ID', ''),
                 'refresh_token': rt,
                 'grant_type': 'refresh_token',
                 'scope': 'Calendars.ReadWrite User.Read offline_access',

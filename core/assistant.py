@@ -1,4 +1,5 @@
 ﻿import re
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -82,7 +83,7 @@ class Assistant:
                 
                 if sehir:
                     pass
-                    api_key = "***REMOVED***"
+                    api_key = os.getenv('OPENWEATHER_API_KEY', '')
                     url = f"http://api.openweathermap.org/data/2.5/weather?q={sehir},TR&appid={api_key}&units=metric&lang=tr"
                     res = _req.get(url, timeout=5)
                     data = res.json()

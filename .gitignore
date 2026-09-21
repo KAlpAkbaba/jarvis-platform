@@ -11,3 +11,11 @@ venv/
 chromedriver.exe
 benim_sesim.wav
 .env
+
+# Secrets / credentials
+.env.*
+!.env.example
+data/*credentials*.json
+data/*token*.json
+*.pem
+*.key

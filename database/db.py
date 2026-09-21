@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from database.models import Base
 
-DB_URL = "postgresql://postgres:***REMOVED***@postgres:5432/asistan"
+import core.config  # noqa: F401  (.env dosyasini yukler)
+
+DB_URL = os.environ['DATABASE_URL']
 
 engine = create_engine(DB_URL)
 SessionLocal = sessionmaker(bind=engine)

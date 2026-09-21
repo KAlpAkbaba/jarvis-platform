@@ -1,3 +1,4 @@
+import os
 import hashlib
 import secrets
 from datetime import datetime, timedelta
@@ -5,7 +6,7 @@ from sqlalchemy import text
 from database.db import SessionLocal
 import resend
 
-resend.api_key = "***REMOVED***"
+resend.api_key = os.getenv('RESEND_API_KEY', '')
 
 class AuthService:
 
